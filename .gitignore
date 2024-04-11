@@ -1,0 +1,4 @@
+.env
+dist
+.history
+node_modules
