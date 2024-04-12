@@ -2,16 +2,17 @@ interface AllWatcherGlobal extends NodeJS.Global {
 
     websiteMap: Map<RegExp, {
         platform: string, //? -> string
-        title: string, //? -> string
+        title?: string, //? -> string
         
         //! Is movie or series
-        type: string, //? -> "movie" | "series"
+        type?: string, //? -> "movie" | "series"
     
         //! series
         season?: string //? -> number
         season_title?: string //? -> string
         episode?: string, //? -> number
         episode_title?: string, //? -> string
+        episode_total?: string, //? -> number
     
         episode_progress?: string, //? -> number
         episode_duration?: string, //? -> number
@@ -46,7 +47,19 @@ interface AllWatcherGlobal extends NodeJS.Global {
         },
     
         //! get iframe and use it by starting expressions with "IF:"
-        iframe?: RegExp, //? -> RegExp
+        iframe?: RegExp | {
+            "0"?: RegExp,
+            "1"?: RegExp,
+            "2"?: RegExp,
+            "3"?: RegExp,
+            "4"?: RegExp,
+            "5"?: RegExp,
+            "6"?: RegExp,
+            "7"?: RegExp,
+            "8"?: RegExp,
+            "9"?: RegExp,
+
+        }, //? -> RegExp
     }>
 
 }

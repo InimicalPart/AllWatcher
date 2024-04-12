@@ -11,6 +11,7 @@ export default function init() {
         episode_title: `document.querySelector("li>a.active.eps-item")?.innerText?.replace(/^.*?:/m,"")?.trim() ?? "N/A"`,
         episode: `parseInt(document.querySelector("li>a.active.eps-item")?.innerText?.replace(/:.*/g,"")?.replace(/[a-zA-Z]/g,"")) ?? "N/A"`,
         season: `parseInt(document.querySelector("#current-season")?.innerText?.replace(/[a-zA-Z]/g,""))`,
+        episode_total: `Array.from(document.querySelector(".ss-episodes.active").children).find(a=>a.tagName=="UL").children.length`,
         
         episode_progress: `IF:document.querySelector("video")?.currentTime ?? "N/A"`,
         episode_duration: `IF:document.querySelector("video")?.duration ?? "N/A"`,
