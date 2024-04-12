@@ -3,9 +3,9 @@ declare const global: AllWatcherGlobal;
 
 
 export default function init() {
-    global.websiteMap.set(/(\/|\.)soap2day/, {
-        platform: "soap2day",
-        title: `document.querySelector("li.breadcrumb-item.active")?.innerText`,
+    global.websiteMap.set(/(\/|\.)myflixer/, {
+        platform: "myflixer",
+        title: `document.querySelector("li.breadcrumb-item.active")?.innerText.replace(/\\s-\\s(Season|Episode).*/gm,"")`,
         type: `document.querySelector(".ss-episodes") == undefined ? "movie" : "series"`,
     
         episode_title: `document.querySelector("li>a.active.eps-item")?.innerText?.replace(/^.*?:/m,"")?.trim() ?? "N/A"`,
@@ -27,7 +27,7 @@ export default function init() {
             watching: `IFRAME_EXISTS`
         },
     
-        iframe: /.*rabbitstream\.net/
+        iframe: /.*megacloud\.tv/
     
     })
 }

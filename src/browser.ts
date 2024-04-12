@@ -93,10 +93,10 @@ export class BrowserController {
 
     public async getIFrame(parentID: any, iframeURLRegExp: RegExp): Promise<string> {
         return new Promise(async (resolve, reject) => {
-            const page = this.pages.find(page => page.id === parentID)
+            let page = this.pages.find(page => page.id === parentID)
             if (!page) {
-                console.error('Parent tab not found or not connected')
-                return
+                await this.initiateDebugging(parentID)
+                page = this.pages.find(page => page.id === parentID)
             }
             const iframes = (await this.getTabs()).filter(tab => tab.type === 'iframe').filter(tab => tab.parentId === parentID)
 
@@ -107,6 +107,7 @@ export class BrowserController {
             }
 
             await this.initiateDebugging(iframe.id)
+            console.log("--- FOUND - " + iframe.id + " - " + iframe.url)
             resolve(iframe.id as string)
 
         })
@@ -148,13 +149,13 @@ export class BrowserController {
 
     public async evaluate(tabId: string, expression: string) {
 
-        console.log('Evaluating expression: ' + expression)
+        console.log('Evaluating expression ('+tabId+'): ' + expression)
 
-        return new Promise((resolve, reject) => {
-        const page = this.pages.find(page => page.id === tabId)
+        return new Promise(async (resolve, reject) => {
+        let page = this.pages.find(page => page.id === tabId)
         if (!page) {
-            console.error('Tab not found or not connected')
-            return
+            await this.initiateDebugging(tabId)
+            page = this.pages.find(page => page.id === tabId)
         }
 
         const randomNumber = Math.floor(Math.random() * 2147483647)
