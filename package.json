@@ -4,7 +4,9 @@
   "description": "",
   "main": "index.js",
   "scripts": {
-    "test": "echo \"Error: no test specified\" && exit 1"
+    "setup": "tsc && node dist/setup.js",
+    "start": "tsc && node dist/index.js",
+    "build": "tsc"
   },
   "keywords": [],
   "author": "",
@@ -26,6 +28,7 @@
   },
   "devDependencies": {
     "@types/discord-rpc": "^4.0.8",
+    "@types/inquirer": "^9.0.7",
     "@types/ws": "^8.5.10"
   }
 }

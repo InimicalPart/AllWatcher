@@ -179,6 +179,8 @@ export class BrowserController {
                 } else {
                     if (["string","number","boolean"].includes(response.result.result.type)) {
                         resolve(response.result.result.value)
+                    } else if (response.result.result.subtype === 'null') {
+                        resolve(null)
                     } else if (response.result.result.type === 'undefined') {
                         resolve(undefined)
                     } else resolve(response.result.result)

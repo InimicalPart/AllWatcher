@@ -38,6 +38,7 @@ let seasonsCache = {
 }
 
 
+
  export async function getInformation(id: string, browser: BrowserController, check:boolean=false): Promise<{
       platform?: string,
       title?: string,
@@ -89,6 +90,8 @@ let seasonsCache = {
       const bottomController = "watch-video--bottom-controls-container"
       const eID = await browser.evaluate(id, `document.querySelector("[data-videoid]")?.dataset?.videoid;`) as string ?? url.split("/").pop().split("?")[0] 
       
+
+
       
       
       let type = null
@@ -99,10 +102,15 @@ let seasonsCache = {
         }
         // button with aria-label="Episodes"
           type = await browser.evaluate(id, `document.querySelector("button[aria-label='Episodes']")`) == undefined ? "movie" : "series"
+          if (type == "movie") {
+            if (cache[eID].type == "series") {
+              type = "series"
+            }
+          }
       }
 
-     const title = await browser.evaluate(id, `document.querySelector("[data-uia$='video-title']")?.firstChild?.textContent`) as string ?? cache[eID]?.title
-     const episode_title = await browser.evaluate(id, `(document.querySelector("[data-uia$='video-title'] span:nth-child(3)") ?? " ")?.textContent`) as string ?? cache[eID].eTitle ?? "N/A"
+     const title = await browser.evaluate(id, `document.querySelector("[data-uia$='video-title']")?.firstChild?.textContent || undefined`) as string ?? cache[eID]?.title
+     const episode_title = await browser.evaluate(id, `(document.querySelector("[data-uia$='video-title'] span:nth-child(3)") ?? " ")?.textContent || undefined`) as string ?? cache[eID].eTitle ?? "N/A"
      let episode = await browser.evaluate(id, `parseInt(document.querySelector("[data-uia$='video-title'] span")?.textContent?.replace("E","")??"0")`) || cache[eID].episode || 0
 
 
@@ -111,7 +119,8 @@ let seasonsCache = {
          cache[eID] = {
              title,
              eTitle: episode_title,
-             episode
+             episode,
+             type
          }
      }
      const totalEpisodesInSeason = season ? seasonsCache[title].episodes.filter(e => e.season_number == season).length : 0
@@ -119,7 +128,26 @@ let seasonsCache = {
      const progress = parseFloat(await browser.evaluate(id, `document.querySelector(".VideoContainer video")?.currentTime ?? document.querySelector(".watch-video--player-view video")?.currentTime ?? "N/A"`) as string ?? "0") * 1000
      const duration = parseFloat(await browser.evaluate(id, `document.querySelector(".VideoContainer video")?.duration ?? document.querySelector(".watch-video--player-view video")?.duration ?? "N/A"`) as string ?? "0") * 1000
 
+    //  const isTeleparty = await browser.evaluate(id, `document.body.innerHTML.includes("tpinjected")`)
+    //  let peopleInParty = 0
+    //   if (isTeleparty) {
+    //     const chatIframe = await browser.getIFrame(id, /redirect\.teleparty\.com/).catch(()=>null)
+    //     if (chatIframe) {
+    //       peopleInParty = await browser.evaluate(chatIframe, `parseInt(document.querySelector("div[data-tip='View member list']")?.querySelector("p")?.textContent)??0`) as number
+    //       await browser.evaluate(chatIframe, `if (document.body.getAttribute("clipboard-overwrite") !== "true") {let a=0;const old = navigator.clipboard.writeText;navigator.clipboard.writeText = async (text)=>{document.body.setAttribute("tp-link", text);if (a!==0){old.bind(navigator.clipboard, text)} else {a++}};document.body.setAttribute("clipboard-overwrite", "true")}`)
+    //         if (!cache[eID].tpLink) {
+    //           await browser.evaluate(chatIframe, `document.querySelector("button[data-for='linkTip']")?.click()`)
+    //           const link = await browser.evaluate(chatIframe, `document.body.getAttribute("tp-link")`) as string;
+    //           console.log(link)
+    //           if (link && link.split("/join/")[1].trim() !== "") cache[eID].tpLink = await browser.evaluate(chatIframe, `document.body.getAttribute("tp-link")`) as string
 
+    //         }
+    //       }
+    //   } else {
+    //     cache[eID].tpLink = null
+    //   }
+        
+        
 
      const fin = {
          platform: "netflix",
