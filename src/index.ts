@@ -1,6 +1,10 @@
 import RPC from 'discord-rpc';
 import chalk from 'chalk';
 import { BrowserController } from './browser.js';
+import {config} from 'dotenv'
+import { readdirSync } from 'fs';
+import { join } from 'path';
+config()
 
 const browser = new BrowserController();
 
@@ -52,22 +56,36 @@ async function getIFrame(parentID, iframe, index=0, stopAt=-1, rememberenceStack
 }
 
 
+
+
+declare const global: AllWatcherGlobal
 let client = new RPC.Client({
     transport: 'ipc', 
 });
-
-declare const global: AllWatcherGlobal
-
 const showAuthor = true;
 
 (async()=>{
 
     
-    const clientIdMap = {
-        "soap2day": "1226991012879011860",
-        "netflix": "1227576564519010374",
-        "myflixer": "1228072915237605427",
-        // "123movies": "1228342834072129567"
+    const clientIdMap = {}
+
+    for (let platform of Object.keys(process.env).filter(key => key.startsWith("PLATFORM_"))) {
+        clientIdMap[platform.replace("PLATFORM_", "").toLowerCase()] = process.env[platform]
+    }
+
+    const platforms = []
+    for (let file of readdirSync(join(process.cwd(), 'dist/platforms'))) {
+        if ((file as string).endsWith('.js')) {
+            platforms.push((file as string).replace('.js', ''))
+        }
+    }
+
+    let missing = platforms.filter(platform => !Object.keys(clientIdMap).includes(platform))
+    if (missing.length > 0) {
+        console.log()
+        console.error("Missing client id for platforms: " + missing.join(", "))
+        console.error("Please run 'npm run setup' to set up the client IDs")
+        process.exit(1)
     }
 
     let presence: any = {}
