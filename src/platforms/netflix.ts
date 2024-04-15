@@ -1,8 +1,11 @@
 import { BrowserController } from "@src/browser.js";
 import { randomBytes } from "crypto";
 import { config } from "dotenv";
-
+import { readFileSync } from "fs";
+import JsonCParser from "jsonc-parser";
 config();
+import { join } from "path";
+
 
 declare const global: AllWatcherGlobal; 
 
@@ -37,9 +40,10 @@ let seasonsCache = {
   */
 }
 
+const NetflixConfig = JsonCParser.parse(readFileSync(join(process.cwd(), "config.jsonc")).toString())?.netflix
 
 
- export async function getInformation(id: string, browser: BrowserController, check:boolean=false): Promise<{
+ export async function getInformation(id: string, browser: BrowserController, user, check:boolean=false): Promise<{
       platform?: string,
       title?: string,
       type?: string,
@@ -128,26 +132,26 @@ let seasonsCache = {
      const progress = parseFloat(await browser.evaluate(id, `document.querySelector(".VideoContainer video")?.currentTime ?? document.querySelector(".watch-video--player-view video")?.currentTime ?? "N/A"`) as string ?? "0") * 1000
      const duration = parseFloat(await browser.evaluate(id, `document.querySelector(".VideoContainer video")?.duration ?? document.querySelector(".watch-video--player-view video")?.duration ?? "N/A"`) as string ?? "0") * 1000
 
-    //  const isTeleparty = await browser.evaluate(id, `document.body.innerHTML.includes("tpinjected")`)
-    //  let peopleInParty = 0
-    //   if (isTeleparty) {
-    //     const chatIframe = await browser.getIFrame(id, /redirect\.teleparty\.com/).catch(()=>null)
-    //     if (chatIframe) {
-    //       peopleInParty = await browser.evaluate(chatIframe, `parseInt(document.querySelector("div[data-tip='View member list']")?.querySelector("p")?.textContent)??0`) as number
-    //       await browser.evaluate(chatIframe, `if (document.body.getAttribute("clipboard-overwrite") !== "true") {let a=0;const old = navigator.clipboard.writeText;navigator.clipboard.writeText = async (text)=>{document.body.setAttribute("tp-link", text);if (a!==0){old.bind(navigator.clipboard, text)} else {a++}};document.body.setAttribute("clipboard-overwrite", "true")}`)
-    //         if (!cache[eID].tpLink) {
-    //           await browser.evaluate(chatIframe, `document.querySelector("button[data-for='linkTip']")?.click()`)
-    //           const link = await browser.evaluate(chatIframe, `document.body.getAttribute("tp-link")`) as string;
-    //           console.log(link)
-    //           if (link && link.split("/join/")[1].trim() !== "") cache[eID].tpLink = await browser.evaluate(chatIframe, `document.body.getAttribute("tp-link")`) as string
+     const isTeleparty = await browser.evaluate(id, `document.body.innerHTML.includes("tpinjected")`)
+     let peopleInParty = 0
+      if (isTeleparty) {
+        const chatIframe = await browser.getIFrame(id, /redirect\.teleparty\.com/).catch(()=>null)
+        if (chatIframe) {
+          peopleInParty = await browser.evaluate(chatIframe, `parseInt(document.querySelector("div[data-tip='View member list']")?.querySelector("p")?.textContent)??0`) as number
+          await browser.evaluate(chatIframe, `if (document.body.getAttribute("clipboard-overwrite") !== "true") {let a=0;const old = navigator.clipboard.writeText;navigator.clipboard.writeText = async (text)=>{document.body.setAttribute("tp-link", text);if (a!==0){old.bind(navigator.clipboard, text)} else {a++}};document.body.setAttribute("clipboard-overwrite", "true")}`)
+            if (!cache[eID].tpLink) {
+              await browser.evaluate(chatIframe, `document.querySelector("button[data-for='linkTip']")?.click()`)
+              const link = await browser.evaluate(chatIframe, `document.body.getAttribute("tp-link")`) as string;
+              console.log(link)
+              if (link && link.split("/join/")[1].trim() !== "") cache[eID].tpLink = await browser.evaluate(chatIframe, `document.body.getAttribute("tp-link")`) as string
 
-    //         }
-    //       }
-    //   } else {
-    //     cache[eID].tpLink = null
-    //   }
+            }
+          }
+      } else {
+        cache[eID].tpLink = null
+      }
         
-        
+      console.log(user)
 
      const fin = {
          platform: "netflix",
@@ -168,7 +172,13 @@ let seasonsCache = {
               {
                   label: `Watch ${title}`.length > 32 ? "Watch" : `Watch ${title}`,
                   url: "https://www.netflix.com/title/" + eID
-              }
+              },
+              ...(isTeleparty&&NetflixConfig?.teleparty?.showJoinLink ? [
+                {
+                  label: `Watch with ${user.global_name}`.length > 32 ? "Join" : `Watch with ${user.global_name}`,
+                  url: cache[eID].tpLink
+                }
+              ] : [])
          ]
      }
 
