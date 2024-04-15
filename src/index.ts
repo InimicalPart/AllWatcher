@@ -419,7 +419,7 @@ async function retrieveWanted() {
             }
         } else {
             if (watchingTab.platform.funcs?.getInformation) {
-                let info = await watchingTab.platform.funcs.getInformation(watchingTab.id, browser, true)
+                let info = await watchingTab.platform.funcs.getInformation(watchingTab.id, browser, client.user, true)
                 console.log(info)
                 if (!info || !info.watching) {
                     onWatchSite.splice(onWatchSite.indexOf(watchingTab), 1)
@@ -484,7 +484,7 @@ async function retrieveWanted() {
             } else {
 
                 if (browsingTab.platform.funcs?.getInformation) {
-                    let info = await browsingTab.platform.funcs.getInformation(browsingTab.id, browser, true)
+                    let info = await browsingTab.platform.funcs.getInformation(browsingTab.id, browser, client.user, true)
                     if (!info || !info.browsing) {
                         isBrowsing.splice(isBrowsing.indexOf(browsingTab), 1)
                         continue
@@ -534,7 +534,7 @@ async function mapToResults(interested): Promise<{
     if (!associatedPlatform) return null
 
     if (associatedPlatform?.funcs?.getInformation) {
-        return associatedPlatform.funcs.getInformation(interested.id, browser)
+        return associatedPlatform.funcs.getInformation(interested.id, browser, client.user)
     } else {
         let sortedKeys = Object.keys(interested.platform).sort((a, b) => {
             // type, platform, browsing, watching first, then iframe, and then the rest
