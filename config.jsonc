@@ -3,6 +3,8 @@
         "teleparty": {
             //! Whether or not show the join link in the Discord Rich Presence
             "showJoinLink": false
-        }
+        },
+        //! Whether or not to automatically skip the intro 
+        "autoSkipIntro": true
     }
 }

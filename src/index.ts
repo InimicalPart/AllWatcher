@@ -4,6 +4,7 @@ import { BrowserController } from './browser.js';
 import {config} from 'dotenv'
 import { readdirSync } from 'fs';
 import { join } from 'path';
+import { AWG } from './types/types.js';
 config()
 
 const browser = new BrowserController();
@@ -58,7 +59,7 @@ async function getIFrame(parentID, iframe, index=0, stopAt=-1, rememberenceStack
 
 
 
-declare const global: AllWatcherGlobal
+declare const global: AWG
 let client = new RPC.Client({
     transport: 'ipc', 
 });
@@ -118,7 +119,7 @@ const showAuthor = true;
                 pastInformation = {};
                 await client.clearActivity();
             }
-            console.log("No page found");
+            console.log("No page for information found");
         } else {
 
             let interested: any = matching.filter(tab => tab.priority == highestPrio)
@@ -143,6 +144,8 @@ const showAuthor = true;
             } else interested = interested[0]
 
             await browser.initiateDebugging(interested.id)
+
+            
 
             const pageIsReady = await browser.evaluate(interested.id, "document.readyState === 'complete'")
 
@@ -178,7 +181,6 @@ const showAuthor = true;
 
                 if (ready) {
 
-
                     if (interested?.platform?.preCheck?.browsing && interested.browsing) {
                         await browser.evaluate(interested.id, interested?.platform?.preCheck?.browsing)
                     } else if (interested?.platform?.preCheck?.watching && interested.watching) {
@@ -195,7 +197,6 @@ const showAuthor = true;
 
 
                     if (information) {
-                        console.log(information)
                         pastInformation = {browsing: information.browsing, watching: information.watching, playing: information.playing,
                             ...(
                             information.type == "series" ? {episode: information.episode, season: information.season} : {title: information.title}
@@ -203,9 +204,7 @@ const showAuthor = true;
                             endTime: !information.playing ? Number.POSITIVE_INFINITY : (information.type == "movie" ? (floorToSeconds((Date.now() + information.movie_duration) - information.movie_progress)??null) : (floorToSeconds((Date.now() + information.episode_duration) - information.episode_progress) ?? null))
                         }
                         presence = await mapInfoToPresence(information)
-                        
-                        console.log(presence)
-                        
+                                                
                         await switchPlatform(information["platform"])
                         await setActivity(presence)
                     }
@@ -230,7 +229,7 @@ const showAuthor = true;
                         pastInformation = {};
                         await client.clearActivity();
                     }
-                    console.log("No page found");
+                    console.log("No page for information found");
                     return;
                 }
 
@@ -262,7 +261,6 @@ const showAuthor = true;
             
             if (!pageIsReady) return console.log("Page not ready")
 
-            console.log(interested.platform.isReady, interested.browsing, interested.watching)
             if (interested.platform.isReady) {
                 if (interested?.platform?.isReady?.browsing && interested.browsing) {
 
@@ -302,11 +300,10 @@ const showAuthor = true;
                 await browser.evaluate(interested.id, interested?.platform?.postCheck?.watching)
             }
 
-            if (!information) return console.log("No information found")
+            if (!information) return console.log("No information received from page's platform handler")
 
             let newPresence = await mapInfoToPresence(information)
 
-            console.log(pastInformation)
             if (JSON.stringify(pastInformation) != JSON.stringify({browsing: information.browsing, watching: information.watching, playing: information.playing, ...(information.type == "series" ? {episode: information.episode, season: information.season} : {title: information.title}), endTime: !information.playing ? Number.POSITIVE_INFINITY : (information.type == "movie" ? (floorToSeconds((Date.now() + information.movie_duration) - information.movie_progress)??null) : (floorToSeconds((Date.now() + information.episode_duration) - information.episode_progress) ?? null))})) {
                 pastInformation = {browsing: information.browsing, watching: information.watching, playing: information.playing,
                     ...(
@@ -314,12 +311,10 @@ const showAuthor = true;
                     ),
                     endTime: !information.playing ? Number.POSITIVE_INFINITY : (information.type == "movie" ? (floorToSeconds((Date.now() + information.movie_duration) - information.movie_progress)??null) : (floorToSeconds((Date.now() + information.episode_duration) - information.episode_progress) ?? null))
                 }
-                console.log(newPresence)   
                 await switchPlatform(information["platform"])
                 await setActivity(newPresence)
             } else {
-                console.log(presence)
-                console.log("Presence not updated")
+                console.log("Presence not updated, no changes")
             }
 
         }, 1000)
@@ -337,7 +332,7 @@ const showAuthor = true;
 
     async function setActivity(p) {
         presence = p;
-        console.log("Presence set to: " + p.state)
+        console.log("Presence updated")
         client.setActivity(presence);
     }
 
@@ -368,7 +363,7 @@ const showAuthor = true;
 })()
 
 async function retrieveWanted() {
-    const tabs = await browser.getTabs()
+    const tabs = (await browser.getTabs()).filter(tab => tab.type == "page")
     const onWatchSite = tabs.map(tab => {
             for (const [regex, platform] of global.websiteMap) {
                 if (regex.test(tab.url) && !/allwatcher=false/.test(tab.url)) {
@@ -379,7 +374,7 @@ async function retrieveWanted() {
                 }
             }
             return null
-    }).filter(a=>!!a)
+    }).filter((a: any)=>!!a)
     
     for (let watchingTab of [...onWatchSite]) {
         if (watchingTab.platform.watching) {
@@ -420,7 +415,6 @@ async function retrieveWanted() {
         } else {
             if (watchingTab.platform.funcs?.getInformation) {
                 let info = await watchingTab.platform.funcs.getInformation(watchingTab.id, browser, client.user, true)
-                console.log(info)
                 if (!info || !info.watching) {
                     onWatchSite.splice(onWatchSite.indexOf(watchingTab), 1)
                     continue
@@ -443,7 +437,7 @@ async function retrieveWanted() {
             }
         }
         return null
-    }).filter(a=>!!a)
+    }).filter((a: any)=>!!a)
     
         for (let browsingTab of [...isBrowsing]) {
             if (browsingTab.platform.browsing) {
@@ -451,7 +445,6 @@ async function retrieveWanted() {
                     if (!browser.pages.find(page => page.id == browsingTab.id)) await browser.initiateDebugging(browsingTab.id)
                     if (browsingTab.platform.browsing.startsWith("IF:")) {
                         const IFAppearsXTimes = countOccurrences(browsingTab.platform.watching, "IF:")
-                        console.log(IFAppearsXTimes)
                         if (!browsingTab.platform.iframe) {
                             console.warn("IF: expression used without iframe in '" + browsingTab.platform.platform + "'");
                             isBrowsing.splice(isBrowsing.indexOf(browsingTab), 1)
@@ -529,12 +522,16 @@ async function mapToResults(interested): Promise<{
 
     const associatedPlatform = Array.from(global.websiteMap.entries()).find(([regex, platform]) => regex.test(interested.url))[1]
 
-    console.log(associatedPlatform)
-
     if (!associatedPlatform) return null
 
-    if (associatedPlatform?.funcs?.getInformation) {
-        return associatedPlatform.funcs.getInformation(interested.id, browser, client.user)
+    console.log(
+        chalk.greenBright("[*] ") +
+        chalk.blueBright("Acting on platform: ") +
+        chalk.yellowBright((associatedPlatform as any).platform)
+    )
+
+    if ((associatedPlatform as any)?.funcs?.getInformation) {
+        return (associatedPlatform as any).funcs.getInformation(interested.id, browser, client.user)
     } else {
         let sortedKeys = Object.keys(interested.platform).sort((a, b) => {
             // type, platform, browsing, watching first, then iframe, and then the rest
@@ -585,7 +582,6 @@ async function mapToResults(interested): Promise<{
                 } else if (typeof value == "string") {
                     if ((value as string).startsWith("IF:")) {
                         const IFAppearsXTimes = countOccurrences(value as string, "IF:")
-                        console.log(iframeIDStack)
                         if (!iframeIDStack) {
                             result = "N/A"
                         } else {
@@ -633,21 +629,23 @@ async function mapInfoToPresence(information) {
     let p: RPC.Presence = {
         instance: false
     }
-
-
-    console.log(information.watching, information.browsing, information.playing)
-
     p.buttons = information.buttons
 
     if (information.watching) {
 
         p.details = information.title
         p.largeImageKey = "logo"
-        if (information.playing) p.endTimestamp = information.type == "movie" ? floorToSeconds((Date.now() + information.movie_duration) - information.movie_progress) : floorToSeconds((Date.now() + information.episode_duration) - information.episode_progress)
+        if (information.playing) p.endTimestamp = information.type == "movie" ? (Date.now() + information.movie_duration) - information.movie_progress : (Date.now() + information.episode_duration) - information.episode_progress
         if (information.type == "series") {
             p.state = `S${information.season}:E${information.episode}: ${information.episode_title}`
-            if (information.episode_total) {
-                p.largeImageText = `Episode ${information.episode} of ${information.episode_total}`
+            p.largeImageText=""
+            if (information.episode_total && information.season_total && information.episode_total > 1 && information.season_total > 1) {
+                p.largeImageText += `S${information.season} of S${information.season_total} | E${information.episode} of E${information.episode_total}`
+
+            } else if (information.season_total && information.season_total > 1) {
+                p.largeImageText += `Season ${information.season} of ${information.season_total}`
+            } else if (information.episode_total) {
+                p.largeImageText += `Episode ${information.episode} of ${information.episode_total}`
             }
         }
             

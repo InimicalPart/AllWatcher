@@ -15,50 +15,52 @@
   * along with this program. If not, see <https://www.gnu.org/licenses/>.
  */
 
+import chalk from 'chalk';
 import { readdirSync } from 'fs';
 import path from 'path';
 import UAParserJS from 'ua-parser-js'
 import { WebSocket } from 'ws';
+import { AWG } from './types/types.js';
 
-declare const global: AllWatcherGlobal
+declare const global: AWG
 
 //! Where the magic happens
-global.websiteMap = new Map<RegExp, {
-    platform: string, //? -> string
-    title: string, //? -> string
+// global.websiteMap = new Map<RegExp, {
+//     platform: string, //? -> string
+//     title: string, //? -> string
     
-    //! Is movie or series
-    type: string, //? -> "movie" | "series"
+//     //! Is movie or series
+//     type: string, //? -> "movie" | "series"
 
-    //! series
-    season?: string //? -> number
-    season_title?: string //? -> string
-    episode?: string, //? -> number
-    episode_title?: string, //? -> string
+//     //! series
+//     season?: string //? -> number
+//     season_title?: string //? -> string
+//     episode?: string, //? -> number
+//     episode_title?: string, //? -> string
 
-    episode_progress?: string, //? -> number
-    episode_duration?: string, //? -> number
+//     episode_progress?: string, //? -> number
+//     episode_duration?: string, //? -> number
 
-    //! movie
-    movie_progress?: string, //? -> number
-    movie_duration?: string, //? -> number
-
-
-    //! playing
-    playing?: string, //? -> boolean
+//     //! movie
+//     movie_progress?: string, //? -> number
+//     movie_duration?: string, //? -> number
 
 
-    //! get iframe and use it
-    iframe?: RegExp, //? -> RegExp
-}>()
+//     //! playing
+//     playing?: string, //? -> boolean
 
-for (let file of readdirSync(path.join(process.cwd(), 'dist/platforms'))) {
-    if (file.endsWith('.js')) {
-        console.log('Loading platform: ' + file)
-        let a = await import(path.join(process.cwd(), 'dist/platforms', file))
-        a.default()
-    }
-}
+
+//     //! get iframe and use it
+//     iframe?: RegExp, //? -> RegExp
+// }>()
+
+// for (let file of readdirSync(path.join(process.cwd(), 'dist/platforms'))) {
+//     if (file.endsWith('.js')) {
+//         console.log('Loading platform: ' + file)
+//         let a = await import(path.join(process.cwd(), 'dist/platforms', file))
+//         a.default()
+//     }
+// }
 
 export class BrowserController {
 
@@ -86,7 +88,6 @@ export class BrowserController {
         })
         this.getBrowser().then(async browser => {
             this.browser = browser
-            console.log(`Found available remote debugging for ${browser.browser.name} with version ${browser.browser.version}`)
         })
 
     }
@@ -147,9 +148,8 @@ export class BrowserController {
         })
     }
 
-    public async evaluate(tabId: string, expression: string) {
+    public async evaluate(tabId: string, expression: string, type:string="UNKWN") {
 
-        console.log('Evaluating expression ('+tabId+'): ' + expression)
 
         return new Promise(async (resolve, reject) => {
         let page = this.pages.find(page => page.id === tabId)
@@ -157,6 +157,12 @@ export class BrowserController {
             await this.initiateDebugging(tabId)
             page = this.pages.find(page => page.id === tabId)
         }
+
+        console.log(
+            chalk.yellowBright(`[*] `) +
+            chalk.hex('#A020F0')(`Running JS expression for ${chalk.blueBright(type)} on page: `) +
+            chalk.blueBright(page.url.replace(/\?.*/,""))
+        )
 
         const randomNumber = Math.floor(Math.random() * 2147483647)
 
