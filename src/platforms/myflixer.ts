@@ -1,4 +1,6 @@
-declare const global: AllWatcherGlobal; 
+import { AWG } from "@src/types/types.js";
+
+declare const global: AWG; 
 
 
 
