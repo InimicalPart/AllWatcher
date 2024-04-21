@@ -5,6 +5,8 @@
             "showJoinLink": false
         },
         //! Whether or not to automatically skip the intro 
-        "autoSkipIntro": true
+        "autoSkipIntro": true,
+        //! Whether or not to automatically skip the recap
+        "autoSkipRecap": false
     }
 }

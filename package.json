@@ -6,7 +6,6 @@
   "scripts": {
     "setup": "npm run build && node --no-warnings dist/setup.js",
     "start": "npm run build && node --no-warnings dist/index.js",
-    "start:new": "npm run build && node --no-warnings dist/rewritten.js",
     "build": "tsc && npx resolve-tspaths"
   },
   "keywords": [],
