@@ -1,370 +1,290 @@
-import RPC from 'discord-rpc';
-import chalk from 'chalk';
-import { BrowserController } from './browser.js';
-import {config} from 'dotenv'
-import { readdirSync } from 'fs';
-import { join } from 'path';
-import { AWG } from './types/types.js';
-config()
+/*
+  * Copyright (c) 2024 Inimi | InimicalPart | Incoverse
+  *
+  * This program is free software: you can redistribute it and/or modify
+  * it under the terms of the GNU General Public License as published by
+  * the Free Software Foundation, either version 3 of the License, or
+  * (at your option) any later version.
+  *
+  * This program is distributed in the hope that it will be useful,
+  * but WITHOUT ANY WARRANTY; without even the implied warranty of
+  * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
+  * GNU General Public License for more details.
+  *
+  * You should have received a copy of the GNU General Public License
+  * along with this program. If not, see <https://www.gnu.org/licenses/>.
+ */
 
-const browser = new BrowserController();
+import {
+    checkMissingPlatformHandlers,
+    connectToDiscordsIPC,
+    isRemoteDebuggingAvailable,
+    loadClientIDs
+} from '@src/lib/utils/misc.js'
+import chalk from 'chalk'
+import DiscordRPC, { Client } from 'discord-rpc'
+import dotenv from 'dotenv'
+import { BrowserController } from './browser.js'
+import { AWG } from './types/types.js'
+import { readFileSync, readdirSync } from 'fs'
+import { join } from 'path'
+import JsonCParser from 'jsonc-parser'
+import Netflix from './platforms/netflix.js'
+import { Platform } from './lib/base/base-platform.js'
+dotenv.config()
 
-
-async function getIFrame(parentID, iframe, index=0, stopAt=-1, rememberenceStack=[]) {
-    const hasMultiple = !(iframe instanceof RegExp)
-    if (stopAt != -1 && index >= stopAt) return {
-        id: parentID,
-        rememberenceStack
-    }
-    if (hasMultiple && index >= Object.keys(iframe).length) return {
-        id: parentID,
-        rememberenceStack
-    }
-    const iframeToCheck = hasMultiple ? iframe[index] : iframe
-    let ready = true
-    let lastIFrameID = parentID
-    lastIFrameID = await browser.getIFrame(parentID, iframeToCheck).catch(e => {
-        ready = false
-    }).then(async (str) => {
-        if (ready) {
-            if (hasMultiple && index + 1 < Object.keys(iframe).length) {
-                rememberenceStack.push(str)
-                lastIFrameID = (await getIFrame(str, iframe, index + 1, stopAt, rememberenceStack))?.id
-                if (!lastIFrameID) {
-                    ready = false
-                    return null
-                }
-                return lastIFrameID
-            }
-            else {
-                rememberenceStack.push(str)
-                lastIFrameID = str
-                return str
-            }
-        }
-        // return lastIFrameID
-    })
-
-    if (!lastIFrameID) {
-        ready = false
-        return null
-    }
-
-    return ready ? {
-        id: lastIFrameID,
-        rememberenceStack
-    } : null                                
-}
-
-
+const checkEveryMs = 1000 //? Check every 1 second
+const showAuthor = true
 
 
 declare const global: AWG
-let client = new RPC.Client({
-    transport: 'ipc', 
-});
-const showAuthor = true;
+
+//! -------------------------------------------------------- !\\
+//!       This is the start of the AllWatcher journey.       !\\
+//!                                                          !\\
+//!        https://github.com/InimicalPart/AllWatcher        !\\
+//! -------------------------------------------------------- !\\
+
+let presence;
+let RPCName = null
+const platformHandlers: {
+    [key: string]: any
+} = {};
+
 
 (async()=>{
 
-    
-    const clientIdMap = {}
-
-    for (let platform of Object.keys(process.env).filter(key => key.startsWith("PLATFORM_"))) {
-        clientIdMap[platform.replace("PLATFORM_", "").toLowerCase()] = process.env[platform]
-    }
-
-    const platforms = []
-    for (let file of readdirSync(join(process.cwd(), 'dist/platforms'))) {
-        if ((file as string).endsWith('.js')) {
-            platforms.push((file as string).replace('.js', ''))
-        }
-    }
-
-    let missing = platforms.filter(platform => !Object.keys(clientIdMap).includes(platform))
-    if (missing.length > 0) {
+    //? Clear the console a slight bit
+    for (let i = 0; i < 5; i++) {
         console.log()
-        console.error("Missing client id for platforms: " + missing.join(", "))
-        console.error("Please run 'npm run setup' to set up the client IDs")
-        process.exit(1)
     }
 
-    let presence: any = {}
-    let pastInformation:{
-        browsing?: boolean,
-        watching?: boolean,
-        playing?: boolean,
-        title?: string,
-        episode?: number,
-        season?: number,
-        endTime?: number,
-        buttons?: any
-    }= {}
-    let rpcName = "soap2day"
-
+    //? Load platform configuration
+    global.config = JsonCParser.parse(readFileSync(join(process.cwd(), "config.jsonc")).toString())
     
-    // const scopes = ['rpc', 'rpc.activities.write'];
+    //? Set up the global object
+    global.websiteMap = new Map<RegExp, Platform>()
+
+    //? Check for missing platform handlers
+    console.log("Checking for missing platform handlers...")
+    const missingHandlers = await checkMissingPlatformHandlers()
+    if (missingHandlers) {
+        console.log()
+        console.error(chalk.redBright("Missing client id for platforms: " + missingHandlers.join(", ")))
+        console.error(chalk.redBright("Please run 'npm run setup' to set up the client IDs"))
+        return
+    } else console.log(chalk.greenBright('All platform handlers are present.'))
     
-    client.once('ready', async () => {
+    //? Load the client IDs for the platforms (from the environment variables)
+    console.log("Loading client IDs for each platform...")
+    global.clientIDMap = await loadClientIDs()
+    console.log(chalk.greenBright(Object.keys(global.clientIDMap).length + " platform client ID(s) loaded:"))
+    let longestPlatform = 0
+    for (let platform of Object.keys(global.clientIDMap)) {
+        if (platform.length > longestPlatform) longestPlatform = platform.length
+    }
+    for (let platform of Object.keys(global.clientIDMap)) {
+        console.log(chalk.yellowBright("  -"), chalk.greenBright(platform.padEnd(longestPlatform, " ")) + ":", chalk.cyanBright(global.clientIDMap[platform]))
+    }
+
+    //? Check if Discord's IPC is available
+    console.log("Checking if Discord is running, and connecting to its IPC if it is...")
+    const discordAvailable = await connectToDiscordsIPC(global.clientIDMap[Object.keys(global.clientIDMap)[0]])
+    if (!discordAvailable) {
+        return console.error(chalk.redBright("Discord's IPC was not found, or is overloaded. Please make sure Discord is running. If it is, please wait a moment and try again.."))
+    } else console.log(chalk.greenBright("Discord's IPC was found and has been connected to."))
+    global.client = discordAvailable as Client
+    global.user = global.client.user
+    RPCName = Object.keys(global.clientIDMap)[0]
+
+    //? Check if remote debugging is available (Chromium-based browsers only)
+    console.log("Checking if a browser with remote debugging is available...")
+    const remoteDebuggingAvailable = await isRemoteDebuggingAvailable()
+    if (!remoteDebuggingAvailable) {
+        return console.error(chalk.redBright('Remote debugging was not found, please make sure your Chromium-based browser is running with remote debugging enabled. If it is, please report this issue. If not, please check the README.md for information on how to enable remote debugging.'))
+    } else {
+        console.log(chalk.greenBright('Remote debugging was found.'))
+        const browserName = remoteDebuggingAvailable.Browser.split('/')[0]
+        const browserVersion = remoteDebuggingAvailable.Browser.split('/')[1]
+        console.log(chalk.gray("Connected to browser:", chalk.cyanBright(browserName), "Version:", chalk.cyanBright(browserVersion)))
+        global.browser = new BrowserController()
         
-        console.log('Authed for user', client.user.username);
-        
-        const matching = await retrieveWanted()
+    }
 
-        const highestPrio = matching[0]?.priority
-
-        if (!highestPrio && highestPrio !== 0) {
-            if (presence) {
-                presence = null;
-                pastInformation = {};
-                await client.clearActivity();
-            }
-            console.log("No page for information found");
-        } else {
-
-            let interested: any = matching.filter(tab => tab.priority == highestPrio)
-
-            if (interested.length > 1) {
-                let active = []
-                for (let tab of interested) {
-                    await browser.evaluate(tab.id, "document.visibilityState == 'visible'").then(visible => {
-                        if (visible) active.push(tab)
-                    })
-                }
-                if (active.length > 1) {
-                    // document.hasFocus()
-                    let focus = []
-                    for (let tab of active) {
-                        await browser.evaluate(tab.id, "document.hasFocus()").then(focused => {
-                            if (focused) focus.push(tab)
-                        })
-                    }
-                    interested = focus[0] || active[0]
-                } else interested = interested[0]
-            } else interested = interested[0]
-
-            await browser.initiateDebugging(interested.id)
-
-            
-
-            const pageIsReady = await browser.evaluate(interested.id, "document.readyState === 'complete'")
-
-
-
-
-            if (pageIsReady) {
-
-                let ready = true
-
-                if (interested.platform.isReady) {
-                    if (interested?.platform?.isReady?.browsing && interested.browsing) {
-
-                        if (interested?.platform?.isReady?.browsing == "IFRAME_EXISTS") {
-                            let lastIFrameID = await getIFrame(interested.id, interested?.platform?.iframe)
-                            if (!lastIFrameID) ready = false
-                        } else {
-                            const browsing = await browser.evaluate(interested.id, interested?.platform?.isReady?.browsing)
-                            if (!browsing) ready = false
-                        }
-                    }
-                    if (interested?.platform?.isReady?.watching && interested.watching) {
-
-                        if (interested?.platform?.isReady?.watching == "IFRAME_EXISTS") {
-                            let lastIFrameID = await getIFrame(interested.id, interested?.platform?.iframe)
-                            if (!lastIFrameID) ready = false
-                        } else {       
-                            const watching = await browser.evaluate(interested.id, interested?.platform?.isReady?.watching)
-                            if (!watching) ready = false
-                        }
-                    }
-                }
-
-                if (ready) {
-
-                    if (interested?.platform?.preCheck?.browsing && interested.browsing) {
-                        await browser.evaluate(interested.id, interested?.platform?.preCheck?.browsing)
-                    } else if (interested?.platform?.preCheck?.watching && interested.watching) {
-                        await browser.evaluate(interested.id, interested?.platform?.preCheck?.watching)
-                    }
-        
-                    const information = await mapToResults(interested)
-                    
-                    if (interested?.platform?.postCheck?.browsing && interested.browsing) {
-                        await browser.evaluate(interested.id, interested?.platform?.postCheck?.browsing)
-                    } else if (interested?.platform?.postCheck?.watching && interested.watching) {
-                        await browser.evaluate(interested.id, interested?.platform?.postCheck?.watching)
-                    }
-
-
-                    if (information) {
-                        pastInformation = {browsing: information.browsing, watching: information.watching, playing: information.playing,
-                            ...(
-                            information.type == "series" ? {episode: information.episode, season: information.season} : {title: information.title}
-                            ),
-                            endTime: !information.playing ? Number.POSITIVE_INFINITY : (information.type == "movie" ? (floorToSeconds((Date.now() + information.movie_duration) - information.movie_progress)??null) : (floorToSeconds((Date.now() + information.episode_duration) - information.episode_progress) ?? null))
-                        }
-                        presence = await mapInfoToPresence(information)
-                                                
-                        await switchPlatform(information["platform"])
-                        await setActivity(presence)
-                    }
-                } else {
-                    console.log("Page not ready")
-                }
-            } else {
-                console.log("Page not ready")
-            }
+    //? Load all platforms
+    console.log("Loading all platform handlers...")
+    for (let file of readdirSync(join(process.cwd(), 'dist/platforms'))) {
+        if (file.endsWith('.js')) {
+            console.log('Loading platform: ' + file)
+            let a = await import(join(process.cwd(), 'dist/platforms', file))
+            global.websiteMap.set(a.default.matchingRegex, a.default)
         }
-
-            
-            setInterval(async () => {
- 
-                const matching = await retrieveWanted()
-
-                const highestPrio = matching[0]?.priority
-
-                if (!highestPrio && highestPrio !== 0) {
-                    if (presence) {
-                        presence = null;
-                        pastInformation = {};
-                        await client.clearActivity();
-                    }
-                    console.log("No page for information found");
-                    return;
-                }
-
-                let interested: any = matching.filter(tab => tab.priority == highestPrio)
-
-                if (interested.length > 1) {
-                    let active = []
-                    for (let tab of interested) {
-                        await browser.evaluate(tab.id, "document.visibilityState == 'visible'").then(visible => {
-                            if (visible) active.push(tab)
-                        })
-                    }
-                    if (active.length > 1) {
-                        // document.hasFocus()
-                        let focus = []
-                        for (let tab of active) {
-                            await browser.evaluate(tab.id, "document.hasFocus()").then(focused => {
-                                if (focused) focus.push(tab)
-                            })
-                        }
-                        interested = focus[0] || active[0]
-                    } else interested = interested[0]
-                } else interested = interested[0]
-
-                await browser.initiateDebugging(interested.id)
-
-
-            const pageIsReady = await browser.evaluate(interested.id, "document.readyState === 'complete'")
-            
-            if (!pageIsReady) return console.log("Page not ready")
-
-            if (interested.platform.isReady) {
-                if (interested?.platform?.isReady?.browsing && interested.browsing) {
-
-                    if (interested?.platform?.isReady?.browsing == "IFRAME_EXISTS") {
-                        let lastIFrameID = await getIFrame(interested.id, interested?.platform?.iframe)
-                        if (!lastIFrameID) return console.log("IFrame not ready")
-
-                    } else {
-                        const browsing = await browser.evaluate(interested.id, interested?.platform?.isReady?.browsing)
-                        if (!browsing) return console.log("Browsing not ready")
-                    }
-                }
-                if (interested?.platform?.isReady?.watching && interested.watching) {
-
-                    if (interested?.platform?.isReady?.watching == "IFRAME_EXISTS") {
-                        let lastIFrameID = await getIFrame(interested.id, interested?.platform?.iframe)
-                        if (!lastIFrameID) return console.log("IFrame not ready")
-                    } else {
-                        const watching = await browser.evaluate(interested.id, interested?.platform?.isReady?.watching)
-                        if (!watching) return console.log("Watching not ready")
-                    }
-                }
-            }
-
-
-            if (interested?.platform?.preCheck?.browsing && interested.browsing) {
-                await browser.evaluate(interested.id, interested?.platform?.preCheck?.browsing)
-            } else if (interested?.platform?.preCheck?.watching && interested.watching) {
-                await browser.evaluate(interested.id, interested?.platform?.preCheck?.watching)
-            }
-
-            const information = await mapToResults(interested)
-                    
-            if (interested?.platform?.postCheck?.browsing && interested.browsing) {
-                await browser.evaluate(interested.id, interested?.platform?.postCheck?.browsing)
-            } else if (interested?.platform?.postCheck?.watching && interested.watching) {
-                await browser.evaluate(interested.id, interested?.platform?.postCheck?.watching)
-            }
-
-            if (!information) return console.log("No information received from page's platform handler")
-
-            let newPresence = await mapInfoToPresence(information)
-
-            if (JSON.stringify(pastInformation) != JSON.stringify({browsing: information.browsing, watching: information.watching, playing: information.playing, ...(information.type == "series" ? {episode: information.episode, season: information.season} : {title: information.title}), endTime: !information.playing ? Number.POSITIVE_INFINITY : (information.type == "movie" ? (floorToSeconds((Date.now() + information.movie_duration) - information.movie_progress)??null) : (floorToSeconds((Date.now() + information.episode_duration) - information.episode_progress) ?? null))})) {
-                pastInformation = {browsing: information.browsing, watching: information.watching, playing: information.playing,
-                    ...(
-                        information.type == "series" ? {episode: information.episode, season: information.season} : {title: information.title}
-                    ),
-                    endTime: !information.playing ? Number.POSITIVE_INFINITY : (information.type == "movie" ? (floorToSeconds((Date.now() + information.movie_duration) - information.movie_progress)??null) : (floorToSeconds((Date.now() + information.episode_duration) - information.episode_progress) ?? null))
-                }
-                await switchPlatform(information["platform"])
-                await setActivity(newPresence)
-            } else {
-                console.log("Presence not updated, no changes")
-            }
-
-        }, 1000)
-        
-    });
+    }
     
-    client.on("disconnect", (code, reason) => {
-        console.log("Connection closed", code, reason);
-        process.exit(2);
-    })
-
-    // Log in to RPC with client id
-    client.login({ clientId: clientIdMap["soap2day"]});
+    await main()
+    setInterval(main, checkEveryMs)
 
 
-    async function setActivity(p) {
-        presence = p;
-        console.log("Presence updated")
-        client.setActivity(presence);
-    }
 
-    async function switchPlatform(platform: string){
-        return new Promise<void>(async (resolve, reject) => {
-            if (rpcName == platform) {
-                console.log("Already on " + platform)
-                return resolve()
-            }
-            if (Object.keys(clientIdMap).indexOf(platform) == -1) {
-                console.error("Invalid platform")
-                process.exit(1)
-            }
-            console.log("Switching to " + platform)
-            await client.destroy()
-            
-            client = new RPC.Client({
-                transport: 'ipc', 
-            });
-            client.login({ clientId: clientIdMap[platform]});
-            client.once('ready', () => {
-                rpcName = platform
-                console.log('Authed for user', client.user.username);
-                resolve()
-            })
-        })
-    }
+
 })()
 
-async function retrieveWanted() {
-    const tabs = (await browser.getTabs()).filter(tab => tab.type == "page")
-    const onWatchSite = tabs.map(tab => {
+async function main() {
+
+    const matching = await getTopTabs()
+    const highestPriority = matching[0]?.priority
+
+    //? If there are no important tabs, clear the presence
+    if (!highestPriority && highestPriority != 0) {
+        if (presence) {
+            presence = null;
+            await global.client.clearActivity();
+            console.log("Cleared presence.")
+        }
+        console.log("No important tabs found.")
+        return
+    }
+
+    //? Get the most important tabs
+    let interested: any = matching.filter(tab => tab.priority == highestPriority)
+
+    //? If there are multiple tabs, get the most active one
+    if (interested.length > 1) {
+        let active = []
+        //? Check if the tab is visible on the user's screen
+        for (let tab of interested) {
+            await global.browser.evaluate(tab.id, "document.visibilityState == 'visible'").then(visible => {
+                if (visible) active.push(tab)
+            })
+        }
+        //? If there are multiple active tabs, get the one that is focused
+        if (active.length > 1) {
+            let focus = []
+            //? Check if the tab is focused
+            for (let tab of active) {
+                await global.browser.evaluate(tab.id, "document.hasFocus()").then(focused => {
+                    if (focused) focus.push(tab)
+                })
+            }
+            interested = focus[0] || active[0]
+        } else interested = interested[0]
+    } else interested = interested[0]
+
+
+    let platform = platformHandlers[interested.id] ?? new interested.platform(interested.id) as any
+    if (!platformHandlers[interested.id]) platformHandlers[interested.id] = platform
+
+    //? Make sure the page matches its RegExp
+    if (!platform.matchingRegex.test(interested.url)) {
+        console.log("Tab does not match its platform. Updating...")
+        const oldPlatform = platform.platform
+        platform = new interested.platform(interested.id) as any
+        platformHandlers[interested.id] = platform
+        console.log("Updated platform from " + oldPlatform + " to " + platform.platform)
+    }
+
+    console.log("Acting on platform: " + platform.platform)
+
+    //? Check if the page is ready
+    if (!await platform.ready) {
+        console.log("Page is not ready.")
+        return
+    }
+
+    //? Check if the platform is set up, and set it up if it isn't
+    if (!platform.isSetup) {
+        await platform.setup()
+    }
+
+    //? Get the platform class
+    const platformClass = (await import(`./platforms/${platform.platform}.js`)).default
+
+    //? Get the type of the page (browsing/watching)
+    const type = await platformClass.getType(interested.id)
+
+    if (!type) {
+        console.log("Type not found.")
+        return
+    }
+
+    //? Set the presence to browsing if the user is browsing the page
+    if (type == "browsing") {
+        await switchPlatform(platform.platform)
+        const newPresence = await mapInfoToPresence({ browsing: true })
+        if (arePresencesDifferent({...newPresence, platform: platform.platform}, presence)) {
+            await global.client.setActivity(newPresence)
+            presence = {
+                ...newPresence,
+                platform: platform.platform
+            }
+            console.log("Set presence.")
+        }
+    //? Set the presence to watching if the user is watching something
+    } else if (type == "watching") {
+        const watchingInfo = await platform.run()
+        if (!watchingInfo) {
+            console.log("No information was provided by the platform.")
+            return
+        }
+        await switchPlatform(platform.platform)
+        const newPresence = await mapInfoToPresence(watchingInfo)
+        if (arePresencesDifferent({...newPresence, platform: platform.platform}, presence)) {
+            await global.client.setActivity(newPresence)
+            presence = {
+                ...newPresence,
+                platform: platform.platform
+            }
+            console.log("Set presence.")
+        }
+    }
+
+
+
+}
+
+function arePresencesDifferent(presence1: DiscordRPC.Presence & {platform: string}, presence2: DiscordRPC.Presence & {platform: string}) {
+
+
+    if ((!presence1 || !presence2) && presence1 != presence2) return true 
+
+    if ((!presence1.endTimestamp || !presence2.endTimestamp) && presence1.endTimestamp != presence2.endTimestamp) return true
+
+    let p1Copy = {...presence1}
+    let p2Copy = {...presence2}
+    if (presence1.endTimestamp) p1Copy.endTimestamp = Math.floor(presence1.endTimestamp as number / 1000) * 1000
+    if (presence2.endTimestamp) p2Copy.endTimestamp = Math.floor(presence2.endTimestamp as number / 1000) * 1000
+
+    return JSON.stringify(p1Copy) != JSON.stringify(p2Copy) || p1Copy.endTimestamp != p2Copy.endTimestamp
+
+}
+
+async function switchPlatform(platform: string){
+    return new Promise<void>(async (resolve, reject) => {
+        if (RPCName == platform) {
+            console.log("Already on " + platform)
+            return resolve()
+        }
+        if (Object.keys(global.clientIDMap).indexOf(platform) == -1) {
+            console.error("Invalid platform")
+            process.exit(1)
+        }
+        console.log("Switching to " + platform)
+        await global.client.destroy()
+        
+        global.client = new Client({
+            transport: 'ipc', 
+        });
+        global.client.login({ clientId: global.clientIDMap[platform]});
+        global.client.once('ready', () => {
+            RPCName = platform
+            resolve()
+        })
+    })
+}
+
+async function getTopTabs(tabs?: any[]) {
+    if (!tabs) tabs = (await global.browser.getTabs()).filter(tab => tab.type == "page")
+    const matchingPages = tabs.map(tab => {
             for (const [regex, platform] of global.websiteMap) {
                 if (regex.test(tab.url) && !/allwatcher=false/.test(tab.url)) {
                     return {
@@ -376,319 +296,80 @@ async function retrieveWanted() {
             return null
     }).filter((a: any)=>!!a)
     
-    for (let watchingTab of [...onWatchSite]) {
-        if (watchingTab.platform.watching) {
-            if (typeof watchingTab.platform.watching == "string") {
-                if (!browser.pages.find(page => page.id == watchingTab.id)) await browser.initiateDebugging(watchingTab.id)
-                if (watchingTab.platform.watching.startsWith("IF:")) {
-                    const IFAppearsXTimes = countOccurrences(watchingTab.platform.watching, "IF:")
-                    if (!watchingTab.platform.iframe) {
-                        console.warn("IF: expression used without iframe in '" + watchingTab.platform.platform + "'");
-                        onWatchSite.splice(onWatchSite.indexOf(watchingTab), 1)
-                        continue
-                    }
-
-                    const iframe = await getIFrame(watchingTab.id, watchingTab.platform.iframe, 0, IFAppearsXTimes-1)
-
-                    if (!iframe) {
-                        console.warn("IF: expression used without iframe in pos " + (IFAppearsXTimes-1) + " in '" + watchingTab.platform.platform + "'");
-                        onWatchSite.splice(onWatchSite.indexOf(watchingTab), 1)
-                        continue
-                    }
-                    if (!await browser.evaluate(iframe.id, watchingTab.platform.watching.replace(/^(IF:)+/gm, ""))) {
-                        onWatchSite.splice(onWatchSite.indexOf(watchingTab), 1)
-                        continue
-                    }
-                } else {
-                    if (!await browser.evaluate(watchingTab.id, watchingTab.platform.watching)) {
-                        onWatchSite.splice(onWatchSite.indexOf(watchingTab), 1)
-                        continue
-                    }
-                }
-            } else {
-                if (!watchingTab.platform.watching.test(watchingTab.url)) {
-                    onWatchSite.splice(onWatchSite.indexOf(watchingTab), 1)
-                    continue
-                }
-
-            }
-        } else {
-            if (watchingTab.platform.funcs?.getInformation) {
-                let info = await watchingTab.platform.funcs.getInformation(watchingTab.id, browser, client.user, true)
-                if (!info || !info.watching) {
-                    onWatchSite.splice(onWatchSite.indexOf(watchingTab), 1)
-                    continue
-                }
-            } else {   
-                onWatchSite.splice(onWatchSite.indexOf(watchingTab), 1)
-                continue
-            }
+    for (let matchingTab of [...matchingPages]) {
+        const type = await matchingTab.platform.getType(matchingTab.id)
+        if (!type) {
+            matchingPages.splice(matchingPages.indexOf(matchingTab), 1)
+            continue
         }
-        watchingTab.watching = true
+        matchingTab.watching = type == "watching"
+        matchingTab.browsing = type == "browsing"
     }
-
-    const isBrowsing = tabs.map(tab => {
-        for (const [regex, platform] of global.websiteMap) {
-            if (regex.test(tab.url) && !/allwatcher=false/.test(tab.url)) {
-                return {
-                    ...tab,
-                    platform
-                }
-            }
-        }
-        return null
-    }).filter((a: any)=>!!a)
     
-        for (let browsingTab of [...isBrowsing]) {
-            if (browsingTab.platform.browsing) {
-                if (typeof browsingTab.platform.browsing == "string") {
-                    if (!browser.pages.find(page => page.id == browsingTab.id)) await browser.initiateDebugging(browsingTab.id)
-                    if (browsingTab.platform.browsing.startsWith("IF:")) {
-                        const IFAppearsXTimes = countOccurrences(browsingTab.platform.watching, "IF:")
-                        if (!browsingTab.platform.iframe) {
-                            console.warn("IF: expression used without iframe in '" + browsingTab.platform.platform + "'");
-                            isBrowsing.splice(isBrowsing.indexOf(browsingTab), 1)
-                            continue
-                        }
-                        const iframe = await getIFrame(browsingTab.id, browsingTab.platform.iframe, 0, IFAppearsXTimes-1)
-                        
-                        if (!iframe) {
-                            console.warn("IF: expression used without iframe in pos " + (IFAppearsXTimes-1) + " in '" + browsingTab.platform.platform + "'");
-                            onWatchSite.splice(onWatchSite.indexOf(browsingTab), 1)
-                            continue
-                        }
-
-                        if (!await browser.evaluate(iframe.id, browsingTab.platform.browsing.replace(/^(IF:)+/gm, ""))) {
-                            isBrowsing.splice(isBrowsing.indexOf(browsingTab), 1)
-                            continue
-                        }
-                    } else {
-                        if (!await browser.evaluate(browsingTab.id, browsingTab.platform.browsing)) {
-                            isBrowsing.splice(isBrowsing.indexOf(browsingTab), 1)
-                            continue
-                        }
-                    }   
-                } else {
-                    if (!browsingTab.platform.browsing.test(browsingTab.url)) {
-                        isBrowsing.splice(isBrowsing.indexOf(browsingTab), 1)
-                        continue
-                    }
-                }
-            } else {
-
-                if (browsingTab.platform.funcs?.getInformation) {
-                    let info = await browsingTab.platform.funcs.getInformation(browsingTab.id, browser, client.user, true)
-                    if (!info || !info.browsing) {
-                        isBrowsing.splice(isBrowsing.indexOf(browsingTab), 1)
-                        continue
-                    }
-                } else {   
-                    isBrowsing.splice(isBrowsing.indexOf(browsingTab), 1)
-                    continue
-                }
-            }
-
-            browsingTab.browsing = true
-        }
-        
     const watchingPrio = 1
     const playingPrio = 30
 
     const table: any = {}
 
-    for (const tab of onWatchSite) {
+    for (const tab of matchingPages) {
 
-        table[tab.id] = watchingPrio + (tab.platform.playing ? playingPrio : 0)
-    }
+        if (tab.browsing) {
+            table[tab.id] = 0
+        } else if (tab.watching) {
+            table[tab.id] = watchingPrio
 
-    for (const tab of isBrowsing) {
-        table[tab.id] = 0
-    }
-
-
-
-    const sorted = Object.keys(table).sort((a, b) => table[b] - table[a])
-
-    return sorted.map(id => { return {priority:table[id], ...(onWatchSite.find(tab => tab.id == id) || isBrowsing.find(tab => tab.id == id))}})
-}
-
-async function mapToResults(interested): Promise<{
-    [key: string]: any
-}> {
-
-    const information: any = {}
-
-    await browser.initiateDebugging(interested.id)
-
-    const associatedPlatform = Array.from(global.websiteMap.entries()).find(([regex, platform]) => regex.test(interested.url))[1]
-
-    if (!associatedPlatform) return null
-
-    console.log(
-        chalk.greenBright("[*] ") +
-        chalk.blueBright("Acting on platform: ") +
-        chalk.yellowBright((associatedPlatform as any).platform)
-    )
-
-    if ((associatedPlatform as any)?.funcs?.getInformation) {
-        return (associatedPlatform as any).funcs.getInformation(interested.id, browser, client.user)
-    } else {
-        let sortedKeys = Object.keys(interested.platform).sort((a, b) => {
-            // type, platform, browsing, watching first, then iframe, and then the rest
-            if (a == "type") return -1
-            if (b == "type") return 1
-            if (a == "platform") return -1
-            if (b == "platform") return 1
-            if (a == "browsing") return -1
-            if (b == "browsing") return 1
-            if (a == "watching") return -1
-            if (b == "watching") return 1
-            if (a == "iframe") return -1
-            if (b == "iframe") return 1
-        
-
-            return 0
-
-        })
-
-        let iframeIDStack = null
-
-
-
-        let type = null
-        for (const key of sortedKeys) {
-            const value = interested.platform[key]
-            if (key == "platform") information["platform"] = value
-            else if (key == "iframe" && information["watching"]) {
-                iframeIDStack = await getIFrame(interested.id, value)
-                if (!iframeIDStack) {
-                    console.warn("IF: expression used without iframe in '" + interested.platform.platform + "'")
-                    return null
-                }
-                iframeIDStack = iframeIDStack.rememberenceStack
-
+            if (await tab.platform.isPlaying(tab.id)) {
+                table[tab.id] += playingPrio
             }
-            else {
-                if (type == "movie" && (key.startsWith("episode") || key.startsWith("season")) || information["browsing"]) continue
-                if (type == "series" && key.startsWith("movie") || information["browsing"]) continue
-
-
-                if (["isReady"].includes(key)) continue
-
-                let result;
-
-                if (value instanceof RegExp) {
-                    result = value.test(interested.url)
-                } else if (typeof value == "string") {
-                    if ((value as string).startsWith("IF:")) {
-                        const IFAppearsXTimes = countOccurrences(value as string, "IF:")
-                        if (!iframeIDStack) {
-                            result = "N/A"
-                        } else {
-                            result = await browser.evaluate(iframeIDStack[IFAppearsXTimes-1], (value as string).replace(/^(IF:)+/gm, ""))
-                        }
-                    } else {
-                        result = await browser.evaluate(interested.id, value as string)
-                    }
-                } else continue
-
-
-                if (key == "episode_progress" || key == "episode_duration" || key == "movie_progress" || key == "movie_duration") {
-                    result = result*1000
-                }
-
-                if (key == "type") {
-                    type = result
-                }
-
-                information[key] = result
-            }
-
         }
-
-        information.watching = information.watching ?? false
-        information.browsing = information.browsing ?? false
-        information.playing = information.playing ?? false
-
-        return information
     }
-}
 
-function s2HMS(_seconds: number) {
-    const hours = Math.floor(_seconds / 3600);
-    const minutes = Math.floor((_seconds % 3600) / 60);
-    const seconds = Math.floor(_seconds % 60);
-    return {
-        hours,
-        minutes,
-        seconds
-    }
+
+
+    const sorted = Object.keys(table).sort((a, b) => table[b] - table[a]).map(id => {
+        return {...matchingPages.find(tab => tab.id == id), priority: table[id]}
+    })
+    return sorted
 }
 
 async function mapInfoToPresence(information) {
-    let p: RPC.Presence = {
+    let newPresence: DiscordRPC.Presence = {
         instance: false
     }
-    p.buttons = information.buttons
+
+
+    newPresence.buttons = information.buttons
 
     if (information.watching) {
 
-        p.details = information.title
-        p.largeImageKey = "logo"
-        if (information.playing) p.endTimestamp = information.type == "movie" ? (Date.now() + information.movie_duration) - information.movie_progress : (Date.now() + information.episode_duration) - information.episode_progress
+        newPresence.details = information.title
+        newPresence.largeImageKey = "logo"
+        if (information.playing) newPresence.endTimestamp = Date.now() + (information.duration - information.progress)
         if (information.type == "series") {
-            p.state = `S${information.season}:E${information.episode}: ${information.episode_title}`
-            p.largeImageText=""
+            newPresence.state = `S${information.season}:E${information.episode}: ${information.episode_title}`
+            newPresence.largeImageText=""
             if (information.episode_total && information.season_total && information.episode_total > 1 && information.season_total > 1) {
-                p.largeImageText += `S${information.season} of S${information.season_total} | E${information.episode} of E${information.episode_total}`
+                newPresence.largeImageText += `S${information.season} of S${information.season_total} | E${information.episode} of E${information.episode_total}`
 
             } else if (information.season_total && information.season_total > 1) {
-                p.largeImageText += `Season ${information.season} of ${information.season_total}`
+                newPresence.largeImageText += `Season ${information.season} of ${information.season_total}`
             } else if (information.episode_total) {
-                p.largeImageText += `Episode ${information.episode} of ${information.episode_total}`
+                newPresence.largeImageText += `Episode ${information.episode} of ${information.episode_total}`
             }
         }
             
     } else {
-        p.details = "Browsing"
-        p.largeImageKey = "logo"
-        p.state = "Selecting a title"
+        newPresence.details = "Browsing"
+        newPresence.largeImageKey = "logo"
+        newPresence.state = "Selecting a title"
     }
 
     if (showAuthor) {
-        p.smallImageKey = "author"
-        p.smallImageText = "AllWatcher - by Inimi"
+        newPresence.smallImageKey = "author"
+        newPresence.smallImageText = "AllWatcher - by Inimi"
     }
 
-    return p
-}
+    console.log(newPresence)
 
-async function onExit(c) {
-    if (c == 2) return;
-    console.error(c)
-    try {
-        if (client) {
-            await client.clearActivity()
-            await client.destroy()
-        }
-    } catch (e) {
-        console.error(e)
-        process.exit(2)
-    }
-    process.exit(2)
-
-}
-
-function floorToSeconds(time: number) {
-    return Math.round(time/1000) * 1000
-}
-
-process.on('exit', onExit)
-process.on('SIGINT', onExit)
-process.on('SIGTERM', onExit)
-process.on('uncaughtException', onExit)
-process.on('unhandledRejection', onExit)
-
-function countOccurrences(str: string, char: string): number {
-    return str.split(char).length - 1; 
+    return newPresence
 }
