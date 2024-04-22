@@ -153,7 +153,7 @@ async function main() {
         let active = []
         //? Check if the tab is visible on the user's screen
         for (let tab of interested) {
-            await global.browser.evaluate(tab.id, "document.visibilityState == 'visible'").then(visible => {
+            await global.browser.evaluate(tab.id, "document.visibilityState == 'visible'", "visibilityCheck").then(visible => {
                 if (visible) active.push(tab)
             })
         }
@@ -162,7 +162,7 @@ async function main() {
             let focus = []
             //? Check if the tab is focused
             for (let tab of active) {
-                await global.browser.evaluate(tab.id, "document.hasFocus()").then(focused => {
+                await global.browser.evaluate(tab.id, "document.hasFocus()", "focusCheck").then(focused => {
                     if (focused) focus.push(tab)
                 })
             }
@@ -200,7 +200,7 @@ async function main() {
     const platformClass = (await import(`./platforms/${platform.platform}.js`)).default
 
     //? Get the type of the page (browsing/watching)
-    const type = await platformClass.getType(interested.id)
+    const type = await platformClass.getType(interested.id, interested.url)
 
     if (!type) {
         console.log("Type not found.")
@@ -219,6 +219,7 @@ async function main() {
             }
             console.log("Set presence.")
         }
+
     //? Set the presence to watching if the user is watching something
     } else if (type == "watching") {
         const watchingInfo = await platform.run()
@@ -297,7 +298,7 @@ async function getTopTabs(tabs?: any[]) {
     }).filter((a: any)=>!!a)
     
     for (let matchingTab of [...matchingPages]) {
-        const type = await matchingTab.platform.getType(matchingTab.id)
+        const type = await matchingTab.platform.getType(matchingTab.id, matchingTab.url)
         if (!type) {
             matchingPages.splice(matchingPages.indexOf(matchingTab), 1)
             continue
@@ -372,4 +373,25 @@ async function mapInfoToPresence(information) {
     console.log(newPresence)
 
     return newPresence
+}
+
+process.on('exit', onExit)
+process.on('SIGINT', onExit)
+process.on('SIGTERM', onExit)
+process.on('uncaughtException', onExit)
+process.on('unhandledRejection', onExit)
+
+async function onExit(c) {
+    if (c == 2) return;
+    if (c instanceof Error) console.error(c)
+    try {
+        if (global.client) {
+            await global.client.clearActivity()
+            await global.client.destroy()
+        }
+    } catch (e) {
+        console.error(e)
+        process.exit(2)
+    }
+    return
 }
