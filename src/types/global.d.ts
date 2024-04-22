@@ -1,1 +1,0 @@
-interface AllWatcherGlobal extends NodeJS.Global {}

@@ -1,13 +1,32 @@
+/*
+  * Copyright (c) 2024 Inimi | InimicalPart | Incoverse
+  *
+  * This program is free software: you can redistribute it and/or modify
+  * it under the terms of the GNU General Public License as published by
+  * the Free Software Foundation, either version 3 of the License, or
+  * (at your option) any later version.
+  *
+  * This program is distributed in the hope that it will be useful,
+  * but WITHOUT ANY WARRANTY; without even the implied warranty of
+  * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
+  * GNU General Public License for more details.
+  *
+  * You should have received a copy of the GNU General Public License
+  * along with this program. If not, see <https://www.gnu.org/licenses/>.
+ */
+
 import { Platform } from "@src/lib/base/base-platform.js";
 import { AWG } from "@src/types/types.js";
 
 declare const global: AWG
 
 export default class Netflix extends Platform {
+    public static prettyName: string = 'Netflix'
     public static platform: string = 'netflix'
     public static matchingRegex: RegExp = /(\/|\.)netflix\.com(\/|)/
     public matchingRegex: RegExp = Netflix.matchingRegex
     public platform: string = Netflix.platform
+
 
     public isSetup: boolean = false
     private cache: any = {}
