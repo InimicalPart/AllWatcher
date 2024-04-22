@@ -16,51 +16,11 @@
  */
 
 import chalk from 'chalk';
-import { readdirSync } from 'fs';
-import path from 'path';
 import UAParserJS from 'ua-parser-js'
 import { WebSocket } from 'ws';
 import { AWG } from './types/types.js';
 
 declare const global: AWG
-
-//! Where the magic happens
-// global.websiteMap = new Map<RegExp, {
-//     platform: string, //? -> string
-//     title: string, //? -> string
-    
-//     //! Is movie or series
-//     type: string, //? -> "movie" | "series"
-
-//     //! series
-//     season?: string //? -> number
-//     season_title?: string //? -> string
-//     episode?: string, //? -> number
-//     episode_title?: string, //? -> string
-
-//     episode_progress?: string, //? -> number
-//     episode_duration?: string, //? -> number
-
-//     //! movie
-//     movie_progress?: string, //? -> number
-//     movie_duration?: string, //? -> number
-
-
-//     //! playing
-//     playing?: string, //? -> boolean
-
-
-//     //! get iframe and use it
-//     iframe?: RegExp, //? -> RegExp
-// }>()
-
-// for (let file of readdirSync(path.join(process.cwd(), 'dist/platforms'))) {
-//     if (file.endsWith('.js')) {
-//         console.log('Loading platform: ' + file)
-//         let a = await import(path.join(process.cwd(), 'dist/platforms', file))
-//         a.default()
-//     }
-// }
 
 export class BrowserController {
 
@@ -82,7 +42,7 @@ export class BrowserController {
         this.checkAvailability().then(available => {
             if (!available) {
                 console.error('No browser found, please make sure you have a browser running with remote debugging enabled.')
-                console.error('You can enable remote debugging by running your browser with the "--remote-debugging-port=9222" flag')
+                console.error(`You can enable remote debugging by running your browser with the "--remote-debugging-port=${this.port}" flag`)
                 process.exit(1)
             }
         })
@@ -103,12 +63,10 @@ export class BrowserController {
 
             const iframe = iframes.find(iframe => iframeURLRegExp.test(iframe.url))
             if (!iframe) {
-                console.error('IFrame not found')
                 return reject()
             }
 
             await this.initiateDebugging(iframe.id)
-            console.log("--- FOUND - " + iframe.id + " - " + iframe.url)
             resolve(iframe.id as string)
 
         })
@@ -123,13 +81,11 @@ export class BrowserController {
             const tabs = await this.getTabs()
             const tab = tabs.find((tab: any) => tab.id === tabId)
             if (!tab) {
-                console.error('Tab not found')
                 return reject()
             }
 
             const ws = new WebSocket(tab.webSocketDebuggerUrl)
             ws.once('open', () => {
-                console.log(`Connected remote debugging to tab: ${tab.title} (${tab.type}${tab.parentId ? ` - ${tab.parentId}` : ''})`)
                 this.pages.push({
                     type: tab.type,
                     ...(tab.type=="iframe"?{parentId: tab.parentId}:{}),
@@ -142,7 +98,6 @@ export class BrowserController {
                 resolve(ws)
             })
             ws.once('close', () => {
-                console.log('Disconnected from tab ' + tab.title)
                 this.pages = this.pages.filter(page => page.id !== tabId)
             })
         })
@@ -194,9 +149,6 @@ export class BrowserController {
             }
         }
         page.ws.on('message', parseResponse)
-    
-        
-    
     })
 
     }
@@ -221,28 +173,6 @@ export class BrowserController {
         const response = await this.request('/json/version', 'GET', null)
         const json = await response.json()
         return UAParserJS(json["User-Agent"])
-    }
-
-    public filterToValidPlatforms(tabs: any[]) {
-        return tabs.filter(tab => {
-
-            for (const [regex, platform] of global.websiteMap) {
-                if (regex.test(tab.url) && !/allwatcher=false/.test(tab.url)) {
-                    return true
-                }
-            }
-            return false
-
-        }).map(tab => {
-            for (const [regex, platform] of global.websiteMap) {
-                if (regex.test(tab.url)) {
-                    return {
-                        ...tab,
-                        platform
-                    }
-                }
-            }
-        })
     }
 
     private request(url: string, method: string, body: any) {
