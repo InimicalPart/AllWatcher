@@ -73,6 +73,8 @@ export default class DisneyPlus extends Platform {
         totalSeasons = seasonsCache[title as string] ? seasonsCache[title as string].episodes.reduce((acc, e) => acc.includes(e.season_number) ? acc : [...acc, e.season_number], []).length : "?"
       }
     
+      let vidID = await global.browser.evaluate(this.tab, `document.location.href.replace(/.*www\\.disneyplus\\.com\\/play\\//g,"").replace(/\\?.*/g,"")`, "vidID") as string
+
       return {
         platform: DisneyPlus.platform,
         title,
@@ -87,6 +89,12 @@ export default class DisneyPlus extends Platform {
         playing,
         browsing: false,
         watching: true,
+        buttons: [
+            {
+                label: `Watch: ${title}`.length > 32 ? `Show on Disney+` : `Watch: ${title}`,
+                url: `https://www.disneyplus.com/browse/entity-${vidID}`
+            }
+        ]
       }
     }
     public static async isPlaying(tabId) {

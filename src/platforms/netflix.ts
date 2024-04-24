@@ -89,6 +89,8 @@ export default class Netflix extends Platform {
         let episode_title: any;
         let episode: any;
         let season: any; 
+
+        if (!title) return null
         if (videoType == "series") {
             episode_title = (this.cache[episodeID]?.episode_title   ?? await global.browser.evaluate(this.tab, `(document.querySelector("[data-uia$='video-title'] span:nth-child(3)") ?? " ")?.textContent || undefined`, "episodeTitleGrab") as string ?? "N/A").replace("’","'")
             episode = this.cache[episodeID]?.episode                || await global.browser.evaluate(this.tab, `parseInt(document.querySelector("[data-uia$='video-title'] span")?.textContent?.replace("E","")??"0")`, "episodeNumberGrab") as number
@@ -133,18 +135,19 @@ export default class Netflix extends Platform {
 
               if (global?.config?.netflix?.teleparty?.showInRichPresence) {
 
-                const pluralSingular = peopleInParty > 1 || peopleInParty == 0 ? "others" : "other"
                 if (global.config?.netflix?.teleparty?.showJoinLink) {
+                  const pluralSingular = peopleInParty > 1 || peopleInParty == 0 ? "people" : "person"
                   if (peopleInParty == 1) {
                     telepartyLabel = `Watch with ${global.user.global_name}`.length > 32 ? "Join" : `Watch with ${global.user.global_name}` 
                   } else {
-                    telepartyLabel = `Watch with ${peopleInParty} ${pluralSingular}`.length > 32 ? "Join" : `Watch with ${peopleInParty} ${pluralSingular}}`
+                    telepartyLabel = `Watch with ${peopleInParty} ${pluralSingular}`.length > 32 ? "Join" : `Watch with ${peopleInParty} ${pluralSingular}`
                   }
                 } else {
+                  const pluralSingular = peopleInParty-1 > 1 || peopleInParty-1 == 0 ? "others" : "other"
                   if (peopleInParty == 1) {
                     telepartyLabel = `Watching alone` 
                   } else {
-                    telepartyLabel = `Watching with ${peopleInParty} ${pluralSingular}`
+                    telepartyLabel = `Watching with ${peopleInParty-1} ${pluralSingular}`
                   }
                 }
               }
@@ -172,13 +175,13 @@ export default class Netflix extends Platform {
             watching: true,
             buttons: [
                   {
-                      label: `Watch: ${title}`.length > 32 ? "Watch" : `Watch: ${title}`,
+                      label: `Watch: ${title}`.length > 32 ? "Show on Netlix" : `Watch: ${title}`,
                       url: "https://www.netflix.com/title/" + episodeID
                   },
                   ...(isTeleparty && global.config?.netflix?.teleparty?.showInRichPresence ? [
                     {
                       label: telepartyLabel,
-                      url: global.config?.netflix?.teleparty?.showJoinLink ? this.cache[episodeID].tpLink : "http://#"
+                      url: global.config?.netflix?.teleparty?.showJoinLink ? this.cache[episodeID]?.tpLink ?? "https://pleasewait.linkisloading" : "http://#"
                     }
                   ] : [])
             ]
