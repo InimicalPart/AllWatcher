@@ -2,7 +2,7 @@
     "netflix": {
         "teleparty": {
             //! Whether or not to show that you are in a Teleparty in the Discord Rich Presence
-            "showInRichPresence": false,
+            "showInRichPresence": true,
             //! Whether or not show the join link in the Discord Rich Presence (requires showInRichPresence to be true)
             "showJoinLink": false
         },
