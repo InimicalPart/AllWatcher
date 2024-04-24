@@ -16,6 +16,7 @@
  */
 
 import { Platform } from "@src/lib/base/base-platform.js";
+import { getSeason, seasonsCache } from "@src/lib/utils/misc.js";
 import { AWG } from "@src/types/types.js";
 
 declare const global: AWG
@@ -30,7 +31,6 @@ export default class Netflix extends Platform {
 
     public isSetup: boolean = false
     private cache: any = {}
-    private seasonsCache: any = {}
 
     constructor(tab: string) {
         super(tab)
@@ -86,13 +86,13 @@ export default class Netflix extends Platform {
 
         const title = this.cache[episodeID]?.title                 ?? await global.browser.evaluate(this.tab, `document.querySelector("[data-uia$='video-title']")?.firstChild?.textContent || undefined`, "titleGrab") as string ?? "N/A"
 
-        let episode_title;
-        let episode;
-        let season; 
+        let episode_title: any;
+        let episode: any;
+        let season: any; 
         if (videoType == "series") {
-            episode_title = (this.cache[episodeID]?.episode_title ?? await global.browser.evaluate(this.tab, `(document.querySelector("[data-uia$='video-title'] span:nth-child(3)") ?? " ")?.textContent || undefined`, "episodeTitleGrab") as string ?? "N/A").replace("’","'")
-            episode = this.cache[episodeID]?.episode             || await global.browser.evaluate(this.tab, `parseInt(document.querySelector("[data-uia$='video-title'] span")?.textContent?.replace("E","")??"0")`, "episodeNumberGrab") as number
-            season = await this.getSeason(title, episode, episode_title) ?? "?"
+            episode_title = (this.cache[episodeID]?.episode_title   ?? await global.browser.evaluate(this.tab, `(document.querySelector("[data-uia$='video-title'] span:nth-child(3)") ?? " ")?.textContent || undefined`, "episodeTitleGrab") as string ?? "N/A").replace("’","'")
+            episode = this.cache[episodeID]?.episode                || await global.browser.evaluate(this.tab, `parseInt(document.querySelector("[data-uia$='video-title'] span")?.textContent?.replace("E","")??"0")`, "episodeNumberGrab") as number
+            season = await getSeason(title, episode, episode_title) ?? "?"
         }
         const playing = await Netflix.isPlaying(this.tab)
         
@@ -108,15 +108,16 @@ export default class Netflix extends Platform {
         let totalEpisodesInSeason = "?"
         let totalSeasons = "?"
 
-        if (videoType == "series") {
-            totalEpisodesInSeason = season ? this.seasonsCache[title].episodes.filter(e => e.season_number == season).length : "?"
-            totalSeasons = this.seasonsCache[title].episodes.reduce((acc, e) => acc.includes(e.season_number) ? acc : [...acc, e.season_number], []).length
+        if (videoType == "series" && season != "?") {
+            totalEpisodesInSeason = season ? seasonsCache[title].episodes.filter((e: { season_number: any; }) => e.season_number == season).length : "?"
+            totalSeasons = seasonsCache[title].episodes.reduce((acc: string | any[], e: { season_number: any; }) => acc.includes(e.season_number) ? acc : [...acc, e.season_number], []).length
         }
   
         const progress = parseFloat(await global.browser.evaluate(this.tab, `document.querySelector(".VideoContainer video")?.currentTime ?? document.querySelector(".watch-video--player-view video")?.currentTime ?? "N/A"`, "videoProgressGrab") as string ?? "0") * 1000
         const duration = parseFloat(await global.browser.evaluate(this.tab, `document.querySelector(".VideoContainer video")?.duration ?? document.querySelector(".watch-video--player-view video")?.duration ?? "N/A"`, "videoDurationGrab") as string ?? "0") * 1000
   
-        const isTeleparty = await global.browser.evaluate(this.tab, `document.body.innerHTML.includes("tpinjected")`, "telepartyCheck")
+        const isTeleparty = global.config?.netflix?.teleparty?.showInRichPresence ? await global.browser.evaluate(this.tab, `document.body.innerHTML.includes("tpinjected")`, "telepartyCheck") : false
+        let telepartyLabel = ""
         let peopleInParty = 0
           if (isTeleparty) {
             const chatIframe = await global.browser.getIFrame(this.tab, /redirect\.teleparty\.com/).catch(()=>null)
@@ -129,12 +130,34 @@ export default class Netflix extends Platform {
                   if (link && link.split("/join/")[1].trim() !== "") this.cache[episodeID].tpLink = link
                 }
               }
+
+              if (global?.config?.netflix?.teleparty?.showInRichPresence) {
+
+                const pluralSingular = peopleInParty > 1 || peopleInParty == 0 ? "others" : "other"
+                if (global.config?.netflix?.teleparty?.showJoinLink) {
+                  if (peopleInParty == 1) {
+                    telepartyLabel = `Watch with ${global.user.global_name}`.length > 32 ? "Join" : `Watch with ${global.user.global_name}` 
+                  } else {
+                    telepartyLabel = `Watch with ${peopleInParty} ${pluralSingular}`.length > 32 ? "Join" : `Watch with ${peopleInParty} ${pluralSingular}}`
+                  }
+                } else {
+                  if (peopleInParty == 1) {
+                    telepartyLabel = `Watching alone` 
+                  } else {
+                    telepartyLabel = `Watching with ${peopleInParty} ${pluralSingular}`
+                  }
+                }
+              }
+
           } else {
             this.cache[episodeID].tpLink = null
           }
 
+
+
+
           return {
-            platform: "netflix",
+            platform: Netflix.platform,
             title,
             type: videoType,
             season,
@@ -152,16 +175,16 @@ export default class Netflix extends Platform {
                       label: `Watch: ${title}`.length > 32 ? "Watch" : `Watch: ${title}`,
                       url: "https://www.netflix.com/title/" + episodeID
                   },
-                  ...(isTeleparty && global.config?.netflix?.teleparty?.showJoinLink ? [
+                  ...(isTeleparty && global.config?.netflix?.teleparty?.showInRichPresence ? [
                     {
-                      label: `Watch with ${global.user.global_name}`.length > 32 ? "Join" : `Watch with ${global.user.global_name}`,
-                      url: this.cache[episodeID].tpLink
+                      label: telepartyLabel,
+                      url: global.config?.netflix?.teleparty?.showJoinLink ? this.cache[episodeID].tpLink : "http://#"
                     }
                   ] : [])
             ]
         }
       }
-    public static async isPlaying(tabId) {
+    public static async isPlaying(tabId: string) {
         return !await global.browser.evaluate(tabId, `(document.querySelector(".VideoContainer video")?.paused ?? document.querySelector(".watch-video--player-view video")?.paused)`, "playingCheck")
     }
 
@@ -188,137 +211,5 @@ export default class Netflix extends Platform {
         return result.watching ? "watching" : result.browsing ? "browsing" : null
     }
 
-    private async getSeason(title, episode_number, episode_name) {
-        //? Get TMDB API key
-        let apiKey = process.env.TMDB_API_KEY
-        if (!apiKey) throw new Error("TMDB API key not found")
 
-
-        let season;
-         try {
-           //? Check if the title is in the cache, meaning we have already fetched the seasons and episodes
-           if (Object.keys(this.seasonsCache).includes(title)) {
-             //? Find the episode in the cache
-             let currentEpisode = this.seasonsCache[title].episodes.find(
-               (episode) =>
-                 episode.episode_number === episode_number &&
-                 episode.name === episode_name
-             );
-             //? If the episode is not found, check if the episode name is "Pilot" and if so, find the episode by episode number
-             //? It is common that the "Pilot" episode is not named "Pilot" on TMDB 
-             if (!currentEpisode) {
-                if (episode_name.toLowerCase() == "pilot") {
-                  currentEpisode = this.seasonsCache[title].episodes.find(
-                    (episode) =>
-                      episode.episode_number === episode_number
-                  );
-                  if (!currentEpisode) throw new Error("Episode not found on TMDB");
-                } else throw new Error("Episode not found on TMDB");
-             }
-
-             season = currentEpisode.season_number;
-           } else {
-            //? fetch the title from TMDB as a TV show
-             let movie = await (
-               await fetch(
-                 "https:api.themoviedb.org/3/search/tv?query=" +
-                   title +
-                   "&api_key=" +
-                   apiKey
-               )
-             ).json();
-             let type = "tv";
-             //? If the title is not found, fetch the title as a movie
-             if (!movie.results.some(serie => serie.name === title)) {
-               movie = await (
-                 await fetch(
-                   "https:api.themoviedb.org/3/search/movie?query=" +
-                     title +
-                     "&api_key=" +
-                     apiKey
-                 )
-               ).json();
-               type = "movie";
-               //? If the title is not found as a movie or a TV show, throw an error
-               if (!movie.results.some(serie => serie.name === title)) {
-                 throw new Error("Movie not found on TMDB");
-               }
-             }
-             let movieId = movie.results.find(serie => serie.name === title).id;
-             //? Fetch the details of the movie/TV show
-             let details = await (
-               await fetch(
-                 "https:api.themoviedb.org/3/" +
-                   type +
-                   "/" +
-                   movieId +
-                   "?api_key=" +
-                   apiKey
-               )
-             ).json();
-             let seasons = details.seasons.filter(
-               (season) => season.season_number !== 0
-             );
-
-             let allEpisodes = [];
-            //? Fetch all episodes of all seasons
-             for (let i = 0; i < seasons.length; i++) {
-               let season = seasons[i];
-               let episodes = await (
-                 await fetch(
-                   "https:api.themoviedb.org/3/" +
-                     type +
-                     "/" +
-                     movieId +
-                     "/season/" +
-                     season.season_number +
-                     "?api_key=" +
-                     apiKey
-                 )
-               ).json();
-               //? Push all episodes to the allEpisodes array
-               for (let j = 0; j < episodes.episodes.length; j++) {
-                 let episode = {
-                   episode_number: episodes.episodes[j].episode_number,
-                   name: episodes.episodes[j].name.replace("’","'"),
-                   season_number: episodes.episodes[j].season_number,
-                 };
-                 allEpisodes.push(episode);
-               }
-             }
-
-
-            //? Find the current episode
-             let currentEpisode = allEpisodes.find(
-               (episode) =>
-                 episode.episode_number === episode_number &&
-                 episode.name === episode_name
-             );
-
-            //? If the episode is not found, check if the episode name is "Pilot" and if so, find the episode by episode number
-            //? It is common that the "Pilot" episode is not named "Pilot" on TMDB
-            if (!currentEpisode) {
-                if (episode_name.toLowerCase() == "pilot") {
-                currentEpisode = allEpisodes.find(
-                    (episode) =>
-                    episode.episode_number === episode_number
-                );
-                if (!currentEpisode) throw new Error("Episode not found on TMDB");
-                } else throw new Error("Episode not found on TMDB");
-            }
-
-             season = currentEpisode.season_number;
-            //? Cache the seasons and episodes
-             this.seasonsCache[title] = {
-               episodes: allEpisodes,
-             };
-           }
-         } catch (e) {
-           console.error(e);
-         }
-
-
-        //? Return the season number
-        return season;
-    }
 }

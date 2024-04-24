@@ -19,7 +19,11 @@ import chalk from "chalk";
 import {config} from "dotenv";
 import { join } from "path";
 import inquirer from "inquirer";
-import { readFileSync, readdirSync, writeFileSync } from "fs";
+import { existsSync, readFileSync, readdirSync, writeFileSync } from "fs";
+
+
+
+const teamName = "AllWatcher"
 
 
 config({path: join(process.cwd(), '.env')})
@@ -120,12 +124,15 @@ const nameFormatMap:{
         if (validationResponse.status == 401) {
             console.log(chalk.redBright('Invalid token! Exiting...'))
             process.exit(3)
-        } else {
+        } else if (validationResponse.status == 200) {
             console.log(chalk.greenBright('Token is valid! Welcome ') + chalk.yellowBright("@"+(await validationResponse.json()).username) + chalk.green('!'))
+        } else {
+            console.log(chalk.redBright('Failed to validate token! Exiting... - ' + chalk.cyanBright(await validationResponse.text())))
+            process.exit(3)
         }
 
         console.log()
-        console.log("Checking if team exists... (" + chalk.cyanBright("AllWatcher") + ")")
+        console.log("Checking if team exists... (" + chalk.cyanBright(teamName) + ")")
         let teamID = null
         let alreadyExistingApplications = []
         const teamsResponse = await fetch("https://discord.com/api/v9/teams", {
@@ -133,10 +140,17 @@ const nameFormatMap:{
                 Authorization: process.env.DISCORD_TOKEN
             }
         })
+
+        if (teamsResponse.status != 200) {
+            console.log(chalk.redBright('Failed to get teams!'))
+            process.exit(1)
+        }
+
         for (let team of await teamsResponse.json()) {
-            if (team.name == "AllWatcher") {
+            if (team.name == teamName) {
                 teamID = team.id
-                console.log(chalk.greenBright('Team found!'))
+                console.log
+                console.log(chalk.greenBright('Team found! ID: ' + chalk.cyanBright(teamID)))
             }
         }
         
@@ -147,6 +161,12 @@ const nameFormatMap:{
                     Authorization: process.env.DISCORD_TOKEN
                 }
             })
+
+            if (applicationsResponse.status != 200) {
+                console.log(chalk.redBright('Failed to get applications for team: ' + chalk.cyanBright(teamID)))
+                process.exit(1)
+            }
+
             alreadyExistingApplications = (await applicationsResponse.json()).map((app: any) => {
                 return {
                     id: app.id,
@@ -180,11 +200,17 @@ const nameFormatMap:{
                     'Content-Type': 'application/json'
                 },
                 body: JSON.stringify({
-                    name: "AllWatcher"
+                    name: teamName
                 })
             })
-            teamID = (await teamResponse.json()).id
-            console.log(chalk.greenBright('Team created!'))
+
+            if (teamResponse.status == 201) {
+                teamID = (await teamResponse.json()).id
+                console.log(chalk.greenBright('Team created! ID: ' + chalk.cyanBright(teamID)))
+            } else {
+                console.log(chalk.redBright('Failed to create team: ' + chalk.cyanBright(await teamResponse.text())))
+                process.exit(1)
+            }
         }
 
         if (missingPlatforms.length == 0) {
@@ -202,23 +228,31 @@ const nameFormatMap:{
                 },
                 body: JSON.stringify({
                     name: nameFormatMap[platform],
-                    team_id: teamID
+                    team_id: teamID,
+                    icon: existsSync(join(process.cwd(), 'assets', 'platform_icons', platform + '.png')) ? 'data:image/png;base64,' + readFileSync(join(process.cwd(), 'assets', 'platform_icons', platform + '.png')).toString('base64') : undefined
                 })
             })
-            const application = await response.json()
-            newApplications.push({
-                id: application.id,
-                name: application.name
-            })
-            console.log(chalk.greenBright('Created application for ' + chalk.cyanBright(nameFormatMap[platform])))
+
+            if (response.status == 201) {   
+                const application = await response.json()
+                newApplications.push({
+                    id: application.id,
+                    name: application.name
+                })
+                console.log(chalk.greenBright('Created application for ' + chalk.cyanBright(nameFormatMap[platform]) + ' - ID: ' + chalk.cyanBright(application.id)))
+            } else {
+                console.warn(chalk.redBright('Failed to create application for ' + chalk.cyanBright(nameFormatMap[platform]) + ': ' + chalk.cyanBright(await response.text())))
+                process.exit(1)
+            }
         }
         console.log("Creating assets...")
         const platform_icons = readdirSync(join(process.cwd(), 'assets', 'platform_icons'))
+        const icons = readdirSync(join(process.cwd(), 'assets', 'icons'))
 
         for (let application of newApplications) {
             const icon = platform_icons.find(icon => icon.replace(".png","") == Object.keys(nameFormatMap).find(key => nameFormatMap[key] == application.name))
             if (icon) {
-                await fetch("https://discord.com/api/v9/oauth2/applications/" + application.id + "/assets", {
+                const response = await fetch("https://discord.com/api/v9/oauth2/applications/" + application.id + "/assets", {
                     method: 'POST',
                     headers: {
                         Authorization: process.env.DISCORD_TOKEN,
@@ -230,13 +264,20 @@ const nameFormatMap:{
                         type: 1
                     })
                 })
-                console.log(chalk.greenBright('Created "logo" asset for ' + chalk.cyanBright(application.name)))
+
+                if (response.status == 201) {   
+                    const jsonified = await response.json()
+                    console.log(chalk.greenBright(`Created "${chalk.cyanBright("logo")}" asset for ${chalk.cyanBright(application.name)} - ID: ${chalk.cyanBright(jsonified.id)}`))
+                } else {
+                    console.warn(chalk.redBright('Failed to create logo icon: ' + chalk.cyanBright(await response.text())))
+                    process.exit(1)
+                }
             } else {
-                console.log(chalk.redBright('No icon found for ' + chalk.cyanBright(application.name)))
+                console.warn(chalk.redBright('No icon found for ' + chalk.cyanBright(application.name)))
             }
-            const author = platform_icons.find(icon => icon == 'author.png')
+            const author = icons.find(icon => icon == 'author.png')
             if (author) {
-                await fetch("https://discord.com/api/v9/oauth2/applications/" + application.id + "/assets", {
+                const response = await fetch("https://discord.com/api/v9/oauth2/applications/" + application.id + "/assets", {
                     method: 'POST',
                     headers: {
                         Authorization: process.env.DISCORD_TOKEN,
@@ -244,13 +285,45 @@ const nameFormatMap:{
                     },
                     body: JSON.stringify({
                         name: 'author',
-                        image: 'data:image/png;base64,' + readFileSync(join(process.cwd(), 'assets', 'platform_icons', author)).toString('base64'),
+                        image: 'data:image/png;base64,' + readFileSync(join(process.cwd(), 'assets', 'icons', author)).toString('base64'),
                         type: 1
                     })
                 })
-                console.log(chalk.greenBright('Created "author" asset for ' + chalk.cyanBright(application.name)))
+
+                if (response.status == 201) {
+                    const jsonified = await response.json()
+                    console.log(chalk.greenBright(`Created "${chalk.cyanBright("author")}" asset for ${chalk.cyanBright(application.name)} - ID: ${chalk.cyanBright(jsonified.id)}`))
+                } else {
+                    console.warn(chalk.redBright('Failed to create author icon: ' + chalk.cyanBright(await response.text())))
+                    process.exit(1)
+                }
             } else {
-                console.log(chalk.redBright('No author icon found'))
+                console.warn(chalk.redBright('No author icon found'))
+            }
+            const paused = icons.find(icon => icon == 'paused.png')
+            if (paused) {
+                const response = await fetch("https://discord.com/api/v9/oauth2/applications/" + application.id + "/assets", {
+                    method: 'POST',
+                    headers: {
+                        Authorization: process.env.DISCORD_TOKEN,
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({
+                        name: 'paused',
+                        image: 'data:image/png;base64,' + readFileSync(join(process.cwd(), 'assets', 'icons', paused)).toString('base64'),
+                        type: 1
+                    })
+                })
+
+                if (response.status == 201) {
+                    const jsonified = await response.json()
+                    console.log(chalk.greenBright(`Created "${chalk.cyanBright("paused")}" asset for ${chalk.cyanBright(application.name)} - ID: ${chalk.cyanBright(jsonified.id)}`))
+                } else {
+                    console.warn(chalk.redBright('Failed to create paused icon: ' + chalk.cyanBright(await response.text())))
+                    process.exit(1)
+                }
+            } else {
+                console.warn(chalk.redBright('No paused icon found'))
             }
         }
         console.log()
@@ -267,8 +340,6 @@ const nameFormatMap:{
         console.log(chalk.greenBright('Setup complete!'))
         console.log()
         console.log("It might take a few minutes for the changes to reflect on Discord.")
-
-
     }
 })()
 
@@ -276,7 +347,7 @@ function envToObj(env: string) {
     let obj = {}
     for (let line of env.split('\n')) {
         let [key, value] = line.split('=')
-        obj[key] = value.replace(/(^("|')|("|')$)/gm, '')
+        if (key && value) obj[key] = value.replace(/(^("|')|("|')$)/gm, '')
     }
     return obj
 }

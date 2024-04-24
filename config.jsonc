@@ -1,12 +1,18 @@
 {
     "netflix": {
         "teleparty": {
-            //! Whether or not show the join link in the Discord Rich Presence
+            //! Whether or not to show that you are in a Teleparty in the Discord Rich Presence
+            "showInRichPresence": false,
+            //! Whether or not show the join link in the Discord Rich Presence (requires showInRichPresence to be true)
             "showJoinLink": false
         },
         //! Whether or not to automatically skip the intro 
         "autoSkipIntro": true,
         //! Whether or not to automatically skip the recap
         "autoSkipRecap": false
-    }
+    },
+
+    //! Whether or not to show the author of AllWatcher as the small image when the movie is playing
+    //! I recommend keeping this on as it helps me out a lot, but if you don't want to, you can turn it off :)
+    "showAuthor": true
 }
