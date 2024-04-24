@@ -16,8 +16,7 @@
  */
 
 import chalk from 'chalk';
-import UAParserJS from 'ua-parser-js'
-import { WebSocket } from 'ws';
+import WebSocket from 'ws';
 import { AWG } from './types/types.js';
 
 declare const global: AWG
@@ -46,10 +45,6 @@ export class BrowserController {
                 process.exit(1)
             }
         })
-        this.getBrowser().then(async browser => {
-            this.browser = browser
-        })
-
     }
 
     public async getIFrame(parentID: any, iframeURLRegExp: RegExp): Promise<string> {
@@ -167,12 +162,6 @@ export class BrowserController {
     public async getTabs() {
         const response = await this.request('/json/list', 'GET', null)
         return await response.json()
-    }
-
-    public async getBrowser() {
-        const response = await this.request('/json/version', 'GET', null)
-        const json = await response.json()
-        return UAParserJS(json["User-Agent"])
     }
 
     private request(url: string, method: string, body: any) {
