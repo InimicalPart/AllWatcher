@@ -48,7 +48,7 @@ export default class OTTMovies extends Platform { // OTT = OneTwoThree
         const type = await OTTMovies.getType(this.tab, url)
         if (type == "browsing") return { browsing: true }
 
-        const title = await global.browser.evaluate(this.tab, `document.querySelector(".card-title")?.textContent`, "title")
+        const title = await global.browser.evaluate(this.tab, `document.querySelector(".card-title")?.textContent`, "title") as string
         const videoType = await global.browser.evaluate(this.tab, `!!Array.from(document?.querySelectorAll("#eps-list"))?.filter(a=>a?.children[0]?.textContent?.trim()?.startsWith("Episode"))[0] ? "series" : "movie"`, "type")
 
         const iframe1 = await global.browser.getIFrame(this.tab, OTTMovies.iframe1RegExp).catch(() => null)
@@ -56,9 +56,9 @@ export default class OTTMovies extends Platform { // OTT = OneTwoThree
 
         
         let episode_title = "?"
-        let episode = "?"
-        let season = "?"
-        let episode_total = "?";
+        let episode: string | number = "?"
+        let season: string | number = "?"
+        let episode_total: string | number = "?";
         if (videoType == "series") {
             episode_title = await global.browser.evaluate(iframe1, `document.querySelector("iframe").contentDocument.querySelector("ul.episodes").textContent.trim().replace(/EP.*?:( |)/,"") ?? "N/A"`, "episode_title") as any
             episode = await global.browser.evaluate(iframe1, `parseInt(document.querySelector("iframe").contentDocument.querySelector("div.title").textContent.split(" ").find(a=>a.startsWith("EP")).replace("EP","")) ?? "N/A"`, "episode") as any
@@ -87,7 +87,7 @@ export default class OTTMovies extends Platform { // OTT = OneTwoThree
         let totalSeasons: string | number = "?"
         
         if (videoType == "series") {
-            await getSeason(title, episode) // To set the seasons in the cache.   
+            await getSeason(title, episode as number) // To set the seasons in the cache.   
             totalSeasons = seasonsCache[title as string].episodes.reduce((acc: string | any[], e: { season_number: any; }) => acc.includes(e.season_number) ? acc : [...acc, e.season_number], []).length
         }
 
