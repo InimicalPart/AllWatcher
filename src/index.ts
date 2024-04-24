@@ -34,7 +34,6 @@ import { Platform } from './lib/base/base-platform.js'
 dotenv.config()
 
 const checkEveryMs = 1000 //? Check every 1 second
-const showAuthor = true
 
 
 declare const global: AWG
@@ -51,6 +50,7 @@ const platformHandlers: {
     [key: string]: any
 } = {};
 
+let showAuthor = true;
 
 (async()=>{
 
@@ -61,6 +61,7 @@ const platformHandlers: {
 
     //? Load platform configuration
     global.config = JsonCParser.parse(readFileSync(join(process.cwd(), "config.jsonc")).toString())
+    showAuthor = global?.config?.showAuthor ?? true
     
     //? Set up the global object
     global.websiteMap = new Map<RegExp, Platform>()
@@ -122,7 +123,24 @@ const platformHandlers: {
     }
     
     await main()
-    setInterval(main, checkEveryMs)
+    let running = false;
+    let failCount = 0;
+    setInterval(async()=>{
+        if (!running) {
+            failCount = 0
+            running = true
+            await main()
+            running = false
+        } else {
+            console.log("Already running.")
+            failCount++
+            if (failCount > 5) {
+                console.error("Main function has been unable to run for 5 seconds. Forcing run.")
+                failCount = 0
+                running = false
+            }
+        }
+    }, checkEveryMs)
 
 
 
@@ -349,12 +367,13 @@ async function mapInfoToPresence(information) {
         if (information.type == "series") {
             newPresence.state = `S${information.season}:E${information.episode}: ${information.episode_title}`
             newPresence.largeImageText=""
-            if (information.episode_total && information.season_total && information.episode_total > 1 && information.season_total > 1) {
+
+            if (information.episode_total && information.season_total && information.episode_total > 1 && information.season_total > 1 && information.episode_total !== "?" && information.season_total !== "?") {
                 newPresence.largeImageText += `S${information.season} of S${information.season_total} | E${information.episode} of E${information.episode_total}`
 
-            } else if (information.season_total && information.season_total > 1) {
+            } else if (information.season_total && information.season_total > 1 && information.season_total !== "?") {
                 newPresence.largeImageText += `Season ${information.season} of ${information.season_total}`
-            } else if (information.episode_total) {
+            } else if (information.episode_total && information.episode_total > 1 && information.episode_total !== "?") {
                 newPresence.largeImageText += `Episode ${information.episode} of ${information.episode_total}`
             }
         }
@@ -365,9 +384,15 @@ async function mapInfoToPresence(information) {
         newPresence.state = "Selecting a title"
     }
 
-    if (showAuthor) {
+    if (showAuthor && (information.playing || information.browsing)) {
         newPresence.smallImageKey = "author"
         newPresence.smallImageText = "AllWatcher - by Inimi"
+    }
+
+    if (!information.playing && information.watching) {
+        newPresence.smallImageKey = "paused"
+        newPresence.smallImageText = "Paused"
+        if (!newPresence.state) newPresence.state = "Paused"
     }
 
     console.log(newPresence)
@@ -383,6 +408,7 @@ process.on('unhandledRejection', onExit)
 
 async function onExit(c) {
     if (c == 2) return;
+    console.log(c)
     if (c instanceof Error) console.error(c)
     try {
         if (global.client) {
@@ -391,7 +417,6 @@ async function onExit(c) {
         }
     } catch (e) {
         console.error(e)
-        process.exit(2)
     }
-    return
+    process.exit(2)
 }
