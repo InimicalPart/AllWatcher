@@ -7,6 +7,11 @@
   <img src="https://github.com/InimicalPart/AllWatcher/assets/37552123/c21e8991-ec3c-410b-914f-9c0d214a8194"/>
 </div>
 
+> [!WARNING]
+> This project is still under active development. Bugs and errors **will** occur.
+>
+> But feel free to report them in the Issues tab :)
+
 ## Supported Platforms
 > <sub>✅ - **Platform is fully supported.**<br></sub>
 > <sub>⚠️ - **Supported but may be unstable.**<br></sub>
