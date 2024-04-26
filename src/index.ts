@@ -29,8 +29,8 @@ import { AWG } from './types/types.js'
 import { readFileSync, readdirSync } from 'fs'
 import { join } from 'path'
 import JsonCParser from 'jsonc-parser'
-import Netflix from './platforms/netflix.js'
 import { Platform } from './lib/base/base-platform.js'
+import UAParserJS from 'ua-parser-js'
 dotenv.config()
 
 const checkEveryMs = 1000 //? Check every 1 second
@@ -105,9 +105,10 @@ let showAuthor = true;
         return console.error(chalk.redBright('Remote debugging was not found, please make sure your Chromium-based browser is running with remote debugging enabled. If it is, please report this issue. If not, please check the README.md for information on how to enable remote debugging.'))
     } else {
         console.log(chalk.greenBright('Remote debugging was found.'))
-        const browserName = remoteDebuggingAvailable.Browser.split('/')[0]
-        const browserVersion = remoteDebuggingAvailable.Browser.split('/')[1]
-        console.log(chalk.gray("Connected to browser:", chalk.cyanBright(browserName), "Version:", chalk.cyanBright(browserVersion)))
+        const userAgent = remoteDebuggingAvailable["User-Agent"]
+        const browserName = new UAParserJS(userAgent).getBrowser().name
+        const browserMajorVersion = new UAParserJS(userAgent).getBrowser().version.split(".")[0]
+        console.log(chalk.gray("Connected to browser:", chalk.cyanBright(browserName), "Version:", chalk.cyanBright(browserMajorVersion)))
         global.browser = new BrowserController()
         
     }
@@ -116,8 +117,8 @@ let showAuthor = true;
     console.log("Loading all platform handlers...")
     for (let file of readdirSync(join(process.cwd(), 'dist/platforms'))) {
         if (file.endsWith('.js')) {
-            console.log('Loading platform: ' + file)
-            let a = await import(join(process.cwd(), 'dist/platforms', file))
+            console.log('Loading platform: ' + chalk.cyanBright(file.replace('.js', '')))
+            let a = await import("./platforms/" + file)
             global.websiteMap.set(a.default.matchingRegex, a.default)
         }
     }
