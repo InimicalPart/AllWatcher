@@ -26,7 +26,7 @@ import { existsSync, readFileSync, readdirSync, writeFileSync } from "fs";
 const teamName = "AllWatcher"
 
 
-config({path: join(process.cwd(), '.env')})
+config()
 
 const platforms = []
 
@@ -39,7 +39,7 @@ const nameFormatMap:{
     for (let file of readdirSync(join(process.cwd(), 'dist/platforms'))) {
         if ((file as string).endsWith('.js')) {
             platforms.push((file as string).replace('.js', ''))
-            const platform = await import(join(process.cwd(), 'dist/platforms', file))
+            const platform = await import("./platforms/"+file)
             nameFormatMap[platform.default.platform] = platform.default.prettyName
             
         }

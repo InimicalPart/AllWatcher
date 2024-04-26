@@ -110,8 +110,8 @@ export class BrowserController {
 
         console.log(
             chalk.yellowBright(`[*] `) +
-            chalk.hex('#A020F0')(`Running JS expression for ${chalk.blueBright(type)} on page: `) +
-            chalk.blueBright(page.url.replace(/\?.*/,""))
+            chalk.hex('#A020F0')(`Running JS expression for ${chalk.cyanBright(type)} on page: `) +
+            chalk.cyanBright(page.url.replace(/\?.*/,""))
         )
 
         const randomNumber = Math.floor(Math.random() * 2147483647)
@@ -154,7 +154,6 @@ export class BrowserController {
             await this.request('/json/version', 'GET', null)
             return true
         } catch (e) {
-            console.error(e)
             return false
         }
     }
