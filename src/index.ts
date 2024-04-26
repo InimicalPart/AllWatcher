@@ -366,16 +366,18 @@ async function mapInfoToPresence(information) {
         if (information.playing) newPresence.endTimestamp = Date.now() + (information.duration - information.progress)
         if (information.type == "series") {
             newPresence.state = `S${information.season}:E${information.episode}: ${information.episode_title}`
-            newPresence.largeImageText=""
+            newPresence.largeImageText="S? of S? | E? of E?"
 
             if (information.episode_total && information.season_total && information.episode_total > 1 && information.season_total > 1 && information.episode_total !== "?" && information.season_total !== "?") {
-                newPresence.largeImageText += `S${information.season} of S${information.season_total} | E${information.episode} of E${information.episode_total}`
+                newPresence.largeImageText = `S${information.season} of S${information.season_total} | E${information.episode} of E${information.episode_total}`
 
             } else if (information.season_total && information.season_total > 1 && information.season_total !== "?") {
-                newPresence.largeImageText += `Season ${information.season} of ${information.season_total}`
+                newPresence.largeImageText = `Season ${information.season} of ${information.season_total}`
             } else if (information.episode_total && information.episode_total > 1 && information.episode_total !== "?") {
-                newPresence.largeImageText += `Episode ${information.episode} of ${information.episode_total}`
+                newPresence.largeImageText = `Episode ${information.episode} of ${information.episode_total}`
             }
+        } else {
+            newPresence.largeImageText = undefined
         }
             
     } else {
