@@ -100,7 +100,7 @@ export async function getSeason(title: string, episode_number: number, episode_n
          let currentEpisode = seasonsCache[title].episodes.find(
            (episode) =>
              episode.episode_number === episode_number &&
-             (!episode_name || episode.name === episode_name)
+             (!episode_name || episode.name.toLowerCase() === episode_name.toLowerCase())
          );
          //? If the episode is not found, check if the episode name is "Pilot" and if so, find the episode by episode number
          //? It is common that the "Pilot" episode is not named "Pilot" on TMDB 
@@ -168,7 +168,7 @@ export async function getSeason(title: string, episode_number: number, episode_n
           let currentEpisode = allEpisodes.find(
             (episode) =>
               episode.episode_number === episode_number &&
-            (!episode_name || episode.name === episode_name)
+            (!episode_name || episode.name.toLowerCase() === episode_name.toLowerCase())
         );
 
           //? If the episode is not found, check the next movie/TV show
