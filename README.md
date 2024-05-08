@@ -43,7 +43,7 @@
    ```bash
    npm install -g typescript
    ``` 
-5. Configure AllWatching using the `./config.jsonc` file
+5. Configure AllWatcher using the `./config.jsonc` file
 6. Set your environment variables (take a look at `.env.template`)
 7. Make sure Discord is running
 8. [Start your chromium-based browser with remote debugging enabled](https://stackoverflow.com/a/56457835) (you can set it so that it turns on remote debugging by default for convienience)
