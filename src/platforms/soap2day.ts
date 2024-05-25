@@ -93,7 +93,7 @@ export default class Soap2Day extends Platform {
     private static async getType(tabId: string, url?: string) {
         const tabURL = url ?? (await global.browser.getTabs()).find((tab: any) => tab.id === tabId).url
         const result = {
-            browsing: /\/(home|genre\/.*|country\/.*|movie|tv-show|top-imdb|search|tv|movie)/.test(tabURL),
+            browsing: /\/(home|genre\/.*|country\/.*|movie|tv-show|top-imdb|search|tv|movie|cast)/.test(tabURL),
             watching: /\/(watch-tv|watch-movie)/.test(tabURL)
         }
         return result.watching ? "watching" : result.browsing ? "browsing" : null

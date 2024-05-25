@@ -46,14 +46,15 @@ export default class MyFlixer extends Platform {
         } else if (type == "watching") {
             const iframe = await global.browser.getIFrame(this.tab, /.*megacloud\.tv/).catch(() => null)
             if (iframe) {
+                const type = await global.browser.evaluate(this.tab, `document.querySelector(".ss-episodes") == undefined ? "movie" : "series"`, "type")
                 return {
                     watching: true,
                     title: await global.browser.evaluate(this.tab, `document.querySelector("li.breadcrumb-item.active")?.innerText.replace(/\\s-\\s(Season|Episode).*/gm,"")`, "title"),
-                    type: await global.browser.evaluate(this.tab, `document.querySelector(".ss-episodes") == undefined ? "movie" : "series"`, "type"),
-                    episode_title: await global.browser.evaluate(this.tab, `document.querySelector("li>a.active.eps-item")?.innerText?.replace(/^.*?:/m,"")?.trim() ?? "N/A"`, "episode_title"),
-                    episode: await global.browser.evaluate(this.tab, `parseInt(document.querySelector("li>a.active.eps-item")?.innerText?.replace(/:.*/g,"")?.replace(/[a-zA-Z]/g,"")) ?? "N/A"`, "episode"),
-                    season: await global.browser.evaluate(this.tab, `parseInt(document.querySelector("#current-season")?.innerText?.replace(/[a-zA-Z]/g,""))`, "season"),
-                    episode_total: await global.browser.evaluate(this.tab, `Array.from(document.querySelector(".ss-episodes.active").children).find(a=>a.tagName=="UL").children.length`, "episode_total"),
+                    type: type,
+                    episode_title: type == "series" ? await global.browser.evaluate(this.tab, `document.querySelector("li>a.active.eps-item")?.innerText?.replace(/^.*?:/m,"")?.trim() ?? "N/A"`, "episode_title") : undefined,
+                    episode: type == "series" ? await global.browser.evaluate(this.tab, `parseInt(document.querySelector("li>a.active.eps-item")?.innerText?.replace(/:.*/g,"")?.replace(/[a-zA-Z]/g,"")) ?? "N/A"`, "episode") : undefined,
+                    season: type == "series" ? await global.browser.evaluate(this.tab, `parseInt(document.querySelector("#current-season")?.innerText?.replace(/[a-zA-Z]/g,""))`, "season") : undefined,
+                    episode_total: type == "series" ? await global.browser.evaluate(this.tab, `Array.from(document.querySelector(".ss-episodes.active").children).find(a=>a.tagName=="UL").children.length`, "episode_total") : undefined,
                     progress: await global.browser.evaluate(iframe, `document.querySelector("video")?.currentTime ?? "N/A"`, "movie_progress") as number * 1000,
                     duration: await global.browser.evaluate(iframe, `document.querySelector("video")?.duration ?? "N/A"`, "movie_duration") as number * 1000,
                     playing: await global.browser.evaluate(iframe, `!document.querySelector("video")?.paused ?? "N/A"`, "playing")
